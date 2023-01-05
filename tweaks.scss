@@ -1,0 +1,44 @@
+/*-- scss:rules --*/
+
+.theorem {
+    border-width: 3px;
+    border-style: solid;
+    border-radius: 0.25rem;
+    padding-left: 1ex;
+    padding-right: 1ex;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+
+    .theorem-title {
+        display: block;
+        margin-bottom: 1ex;
+    }
+
+    p, ol, ul {
+        font-size: 92%;
+    }
+
+    &.example {
+        border-color: #dee2e6;
+    }
+
+    &.definition {
+        border-color: rgb(83, 150, 150);
+        margin-left: 2rem;
+        margin-right: 2rem;
+    }
+
+    &.exercise {
+        border: none;
+        font-size: 100%;
+    }
+
+    // &.theorem {
+    //     border-color: indigo;
+    // }
+}
+
+// .cell-output {
+//     border-bottom: 2px solid rgb(126, 123, 128);
+//     margin-bottom: 1rem;
+// }

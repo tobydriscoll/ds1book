@@ -1,0 +1,9 @@
+## Overfitting in kNN
+
+Consider a kNN classifier with $k=1$. The class assigned to each value is just that of the nearest training example, making for a piecewise constant labelling. Let's see how this plays out in about as simple a classification problem as we can come up with: a single feature, with the class being the sign of the feature's value. (We arbitrarily assign zero to have class $+1$.) 
+
+$$
+1 + 2 = 3
+$$ {#eq-dummy}
+
+See @eq

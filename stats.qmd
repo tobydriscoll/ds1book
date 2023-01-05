@@ -1,0 +1,1112 @@
+# Descriptive statistics
+{{< include _macros.qmd >}}
+
+When confronted with a new dataset, it's wise to get a sense of its characteristics before attempting to draw conclusions or predictions from it.
+
+One of the fastest ways to become familiar with a data set is to visualize it. Python has many graphics packages with different niches. The most widespread is **Matplotlib**, which is fairly low-level in the sense that you must explicitly specify most aspects of how the plots will look. 
+
+We will make extensive use of **seaborn**, which is built on top of Matplotlib. It's meant to be used at a higher level, i.e., letting you describe what you want to see and making it look pretty good. (It is possible to customize seaborn plots using Matplotlib commands, but we won't need much of that.)
+
+```{python}
+import seaborn as sns
+```
+
+There are three major plot types within seaborn:
+
+`displot`
+: How values of a single variable are distributed.
+
+`relplot`
+: How values of two variables are related to each other.
+
+`catplot`
+: How categorical values are distributed within and across categories.
+
+## Summary statistics
+
+We will use data about car fuel efficiency for illustrations.
+
+```{python}
+import pandas as pd
+import seaborn as sns
+
+cars = sns.load_dataset("mpg")
+```
+
+The `describe` method of a data frame gives summary statistics for each column of quantitative data.
+
+```{python}
+cars.describe()
+```
+
+### Mean, variance, standard deviation
+
+You may already know the "big three" summary statistics: 
+
+::::{#def-stats-meanvarstd}
+Given data values $x_1,\ldots,x_n$, their **mean** is
+$$
+\mu = \frac{1}{n}\sum_{i=1}^n x_i,
+$$ {#eq-stats-mean}
+their **variance** is 
+$$
+\sigma^2 = \frac{1}{n}\sum_{i=1}^n (x_i - \mu)^2,
+$$ {#eq-stats-var}
+and their **standard deviation** is $\sigma$, the square root of the variance.
+::::
+
+Mean is a measurement of central tendency. Variance is the mean of the squares of deviations from the mean. As such, it has the units that are the square of the data, which can be hard to interpret. 
+
+The **standard deviation** (STD) is a measurement of the spread of the data. A small STD implies that the data values are all fairly close to the mean. 
+
+### z-scores
+
+Given data values $x_1,\ldots,x_n$, we can define related values known as **standardized scores** or **z-scores**:
+
+$$
+z_i = \frac{x-\mu}{\sigma}, \ldots i=1,\ldots,n.
+$$
+
+The z-scores have mean zero and standard deviation equal to 1; in physical terms, they are dimensionless. This makes them attractive to work with and compare across data sets. 
+
+```{python}
+def standardize(x):
+    return (x - x.mean()) / x.std()
+
+cars["mpg_z"] = standardize( cars["mpg"] )
+cars[["mpg", "mpg_z"]].describe()
+```
+
+:::{.callout-caution}
+Since floating-point values are rounded off, it's unlikely that a value derived from them that is meant to be zero will actually be exactly zero. Above, the mean value of about $-10^{-15}$ should be seen as reasonable for values that have been rounded off in the 15th digit or so.
+:::
+
+### Populations and samples
+
+In statistics one refers to the **population** as the entire universe of available values. Thus, the ages of everyone on Earth at some instant has a particular mean and standard deviation. However, in order to estimate those values, we can only measure a **sample** of the population directly. 
+
+When @eq-stats-mean is used to compute the mean of a sample rather than a population, we change the notation a bit as a reminder:
+
+$$
+\bar{x} = \frac{1}{n}\sum_{i=1}^n x_i.
+$$ {#eq-stats-mean-sample}
+
+It can be proved that the sample mean is an accurate way to estimate the population mean, in a particular precise sense. If, in a thought experiment, we could average $\bar{x}$ over all possible samples of size $n$, the result would be exactly the population mean $\mu$. We say that $\bar{x}$ is an **unbiased estimator** for $\mu$.
+
+The sample mean in turn can be used within @eq-stats-var to compute **sample variance**:
+
+$$
+s_n^2 = \frac{1}{n}\sum_{i=1}^n (x_i - \bar{x})^2.
+$$ 
+
+However, sample variance is more subtle than the sample mean. If $s_n^2$ is averaged over all possible sample sets, we do *not* get the population variance $\sigma^2$; hence, $s_n^2$ is called a **biased estimator** of the population variance.
+
+:::{.callout-important}
+The sample variance is *not* an unbiased estimator of the population variance.
+:::
+
+An unbiased estimator for $\sigma^2$ is
+
+$$
+s_{n-1}^2 = \frac{1}{n-1}\sum_{i=1}^n (x_i - \bar{x})^2.
+$$ {#eq-stats-var-sample}
+
+::::{#exm-stats-sample}
+The values [1, 4, 9, 16, 25] have mean $$\bar{x}=55/5 = 11$. The sample variance is 
+
+$$
+\begin{split}
+    s_n^2 &= \frac{(1-11)^2+(4-11)^2+(9-11)^2+(16-11)^2+(25-11)^2}{5} \\ 
+    & = \frac{374}{5} = 74.8.
+\end{split}
+$$
+
+By contrast, the unbiased estimate of population variance from this sample is 
+
+$$
+s_{n-1}^2 = \frac{374}{4} = 93.5.
+$$
+::::
+
+As you can see from the formulas, the sample variance is always too large as an estimator, but the difference vanishes as the sample size $n$ increases. 
+
+:::{.callout-warning}
+Sources are not always clear about this terminology. Some use *sample variance* to mean $s_{n-1}^2$, not $s_n^2$, and many even omit the subscripts. You always have to check each source.
+:::
+
+:::{.callout-caution}
+NumPy computes the biased estimator of variance by default, while pandas computes the unbiased version. Whee!
+:::
+
+For standard deviation, *neither* $s_n$ *nor* $s_{n-1}$ is an unbiased estimator of $\sigma$. There is no simple correction that works for all distributions. Our practice is to use $s_{n-1}$, which is what `std` computes in pandas. (Unfortunately, `std` in numpy returns $s_n$.) Thus, for instance, a **sample z-score** for $x_i$ is 
+
+$$
+z_i = \frac{x_i-\bar{x}}{s_{n-1}}.
+$$ {#eq-stats-t-score}
+
+:::{.callout-note}
+In statistics, @eq-stats-t-score is referred to as a *t-score*, and the term *sample z-score* is not common. In data science practice, however, the sample sizes are usually so large that the difference between z-scores and t-scores is rarely important. Most sources just use the term *z-score* indiscriminately.
+:::
+
+## Distributions
+
+Mean and standard deviation give a compact summary of a dataset, but they are far from adequate representations. It's important to appreciate ways to express how all of the values are distributed.
+
+
+::::{#def-data-ecdf}
+Suppose $x_1,\ldots,x_n$ form a set of real data values. The **empirical cumulative distribution function** or ECDF of the dataset is the function $\hat{F}$ whose value at $t$ equals the proportion of the data values that are less than or equal to $t$.
+::::
+
+The term *empirical* refers to the fact that the ECDF is derived from observations of a quantity---i.e., the values in the dataset. In probability, a random variable may be characterized by a theoretical CDF:
+$$
+F(t) = \text{probability of observing a value less than or equal to $t$}.
+$$
+As the number of observations tends to infinity, we expect the empirical CDF to converge to the theoretical one.
+
+::::{#exm-data-uniform-cdf}
+A **uniform distribution** gives an equal probability to every value. The uniform distribution over the interval $[0,1]$ has the CDF 
+$$
+F(t) = \begin{cases} 
+0, & t < 0, \\ 
+t,& 0 \le t \le 1, \\ 
+1,& t > 1.
+\end{cases}
+$$  {#eq-data-uniform-cdf}
+
+Here is an experiment that producing the ECDF for a sample from the random number generator:
+
+```{python}
+from numpy.random import default_rng
+rng = default_rng(19716)
+x = rng.uniform( size=(100,) )
+sns.displot(x, kind="ecdf");
+```
+
+If we take more samples, we should expect to see a curve closer to the theoretical CDF, $F(t)=t$:
+
+```{python}
+x = rng.uniform( size=(4000,) )
+sns.displot(x, kind="ecdf");
+```
+::::
+
+As illustrated in @exm-data-uniform-cdf, the ECDF is a piecewise constant function because it jumps at each observed value. It is also *monotone*, in the sense that it never decreases going from left to right.
+
+By definition, we know that if $a<b$, $\hat{F}(b) - \hat{F}(a)$ is the number of observations in the half-open interval $(a,b]$. This leads into the next definition.
+
+::::{#def-data-histogram}
+Select the ordered values $t_1 < t_2 < \cdots < t_m$, called **edges**, and define **bins** as the intervals
+$$
+B_k = (t_k,t_{k+1}], \qquad k=0,\ldots,m,
+$$
+where we adopt the convention that $t_0=-\infty$ and  $t_{m+1}=\infty$. Let $c_k$ be the number of data values in $B_k$. Then a **histogram** relative to the bins is the list of $(B_0,c_0),\ldots,(B_m,c_m)$.
+::::
+
+::::{#exm-data-uniform-hist}
+Continuing with the uniform distribution of @exm-data-uniform-cdf:
+
+```{python}
+x = rng.uniform( size=(200,) )
+sns.displot(x);
+```
+
+If we want the counts to be divided by the total number of observations, then we use
+
+```{python}
+import numpy as np
+sns.displot(x, bins=np.arange(0,1.2,0.2), stat="density");
+```
+
+The areas of the histograms above sum to 1. This presentation can be useful when comparing sets with widely varying numbers of observations.
+::::
+
+An alternative normalization to the one in @exm-data-uniform-hist is to divide by the bin widths:
+$$
+\frac{c_k}{t_{k+1}-t_k} = \frac{\hat{F}(t_{k+1})-\hat{F}(t_k)}{t_{k+1}-t_k}. 
+$$  {#eq-data-pdf}
+Perhaps you see where this is going next. If we let the number of observations tend to infinity, then $\hat{F}$ will converge to $F$, and if we also let the number of bins go to infinity, then the fraction in @eq-data-pdf converges to $F'(t_k)$. 
+
+::::{#def-data-pdf}
+The **probability density function** or PDF of a variable is the derivative of its CDF.
+::::
+
+Seaborn uses a process called *kernel density estimation* to plot an estimate of the PDF from empirical data.
+
+::::{#exm-data-uniform-pdf}
+Continuing with the uniform distribution of @exm-data-uniform-cdf:
+
+```{python}
+x = rng.uniform( size=(4000,) )
+sns.displot(x, kind="kde");
+```
+
+Note that we did not obtain a particularly good approximation of the true PDF. In part this is because kernel density estimation assumes that the PDF be continuous, but here it is 1 over $[0,1]$ and jumps down to 0 elsewhere.
+::::
+
+### Mean and variance
+
+It's possible to compute the mean and variance (thus STD) of a distribution from its PDF:
+$$
+\begin{split}
+\mu &= \int x f(x) \, dx \\ 
+\sigma^2 &= \int (x-\mu)^2 f(x) \, dx,
+\end{split}
+$$
+where the integrals are taken over the domain of $f$. 
+
+::::{#exm-stats-uniform-mean}
+The uniform distribution over $[0,1]$ has $f(x)=1$ over that interval. Hence,
+$$
+\begin{split}
+\mu &= \int_0^1 x \, dx = \left[ \frac{1}{2} x^2\right]_0^1 = \frac{1}{2}, \\ 
+\sigma^2 &= \int_0^1 \left(x-\tfrac{1}{2}\right)^2 \, dx = \frac{1}{3} - \frac{1}{2} + \frac{1}{4} = \frac{1}{12}.
+\end{split}
+$$
+
+Let's check these results empirically:
+
+```{python}
+from numpy.random import default_rng
+import numpy as np
+
+rng = default_rng(19716)
+x = rng.uniform( size=(2000,) )
+print(f"µ = {np.mean(x):.5f}, 12σ² = {12*np.var(x):.5f}")
+```
+::::
+
+### Median and quantiles
+
+Mean and variance are not the most relevant summary statistics for every dataset. There are important alternatives.
+
+:::{#def-stats-percentile}
+For any $0 < p < 1$, the $100p$-**percentile** is the value of $x$ such that $p$ is the probability of observing a population value less than or equal to $x$. 
+
+The 50th percentile is known as the **median** of the population.
+:::
+
+In other words, percentiles are the inverse function of the CDF. 
+
+The unbiased sample median of $x_1,\ldots,x_n$ can be computed by sorting the values into $y_1,\ldots,y_n$. If $n$ is odd, then $y_{(n+1)/2}$ is the sample median; otherwise, the average of $y_{n/2}$ and $y_{1+(n/2)}$ is the sample median. 
+
+Computing unbiased sample estimates of percentiles other than the median is complicated, and we won't go into the details. For large datasets, the sample values are good estimators in practice.
+
+:::{#exm-stats-median}
+If the sorted values are $1,3,3,4,5,5,5$, then $n=7$ and the sample median is $y_4=4$. If the sample values are $1,3,3,4,5,5,5,9$, then $n=8$ and the sample median is $(4+5)/2=4.5$.
+:::
+
+A set of percentiles dividing probability into $q$ equal pieces is called the $q$–**quantiles**.
+
+::: {#exm-stats-quartiles}
+The 4-quantiles are called **quartiles**. The first quartile is the 25th percentile, or the value that exceeds 1/4 of the population. The second quartile is the median. The third quartile is the 75th percentile. 
+
+Sometimes the definition is extended to the *zeroth quartile*, which is the minimum sample value, and the *fourth quartile*, which is the maximum sample value.
+:::
+
+:::{.callout-caution}
+If this all isn't confusing enough yet, sometimes the word *quantile* is used to mean *percentile*. This is the case for the `quantile` method in pandas.
+:::
+
+::::{#def-stats-IQR}
+The **interquartile range** (IQR) is the difference between the 75th percentile and the 25th percentile.
+::::
+
+IQR is an indication of the spread of the values. For some distributions, the median and IQR might be a good substitute for the mean and standard deviation.
+
+::::{#exm-data-describe}
+The `describe` method includes mean, standard deviation, and the quartiles. 
+
+```{python}
+rng = default_rng(19716)
+df = pd.DataFrame( {
+    "normal" : rng.normal( size=(4000,) ),
+    "uniform" : rng.uniform( size=(4000,) )
+    } )
+df.describe()
+```
+::::
+
+### Normal distribution
+
+The following is the most widely used distribution of a random variable.
+
+::::{#def-stats-normal}
+The **normal distribution** or *Gaussian distribution* with mean $\mu$ and variance $\sigma^2$ is defined by the PDF
+$$
+f(x) = \frac{1}{\sigma \sqrt{2\pi}} e^{ -(x-\mu)^2/(2\sigma^2)}. 
+$$ {#eq-stats-normal}
+The **standard normal** distribution uses $\mu=0$ and $\sigma=1$. 
+:::: 
+
+For data that are distributed normally, about 68% of the values lie within one standard deviation of the mean, and 95% lie within two standard deviations.
+
+::::{#exm-stats-normal}
+The `normal` method of a NumPy RNG assumes a standard normal distribution.
+
+```{python}
+from numpy.random import default_rng
+import seaborn as sns
+
+rng = default_rng(19716)
+x = rng.normal( size=(10000,) )
+sns.displot(x, bins=29);
+```
+
+We can change the variance by multiplication by $\sigma$ and change the mean by adding $\mu$:
+
+```{python}
+import pandas as pd
+
+df = pd.DataFrame( {"x":x, "3x-10":3*x-10} )
+df.describe()
+```
+
+The density estimator works pretty well for normally distributed data, except in the tails, where there are few observations:
+
+```{python}
+sns.displot(data=df, x="3x-10", kind="kde")
+```
+::::
+
+## Grouping data
+
+Sometimes we are interested in breaking down data by categorical values or other criteria. Both seaborn and pandas make this relatively straightforward.
+
+Let's work again with the MPG dataset provided within seaborn:
+
+```{python}
+cars = sns.load_dataset("mpg")
+cars.head()
+```
+
+Here is the distribution of the *mpg* variable over the entire dataset.
+
+```{python}
+sns.displot(data=cars, x="mpg", bins=20);
+```
+
+### Splitting
+
+We can use categorical variables to define groups within the data set. Suppose we want to separate by the *origin* column:
+
+```{python}
+cars["origin"].value_counts()
+```
+
+The `groupby` method for a data frame splits the frame into groups based on categorical values in a designated column:
+
+```{python}
+cars.groupby(["origin"])["mpg"].describe()
+```
+
+Both the median and the mean values are quite a bit lower for *usa* cars than for the other regions. This is also apparent when we plot the distributions individually using different colors:
+
+```{python}
+sns.displot(data=cars, x="mpg", hue="origin");
+```
+
+That graph might be hard to read because of the overlaps. We can instead plot the groups in separate columns in what is often called a *facet plot*:
+
+```{python}
+#| column: body-outset
+sns.displot(data=cars, x="mpg", col="origin", height=2.5);
+```
+
+It's now clear that the U.S.A. cars are more clustered on the left (smaller MPG) than are the Japanese and European cars.
+
+Another way to visualize grouped data is with a **box plot**:
+
+```{python}
+sns.catplot(data=cars, x="origin", y="mpg", kind="box");
+```
+
+Each colored box shows the interquartile range, with the interior horizontal line showing the median. The whiskers and dots are explained in a later section. A related visualization is a **violin plot**:
+
+```{python}
+sns.catplot(data=cars, x="mpg", y="origin", kind="violin");
+```
+
+In a violin plot, the inner lines show the same information as the box plot, with the thick part showing the IQR, while the sides of the "violins" are KDE estimates of the density functions.
+
+It's also possible to split using a quantitative variable. The `cut` method will put the values into bins that serve to define the groups:
+
+```{python}
+cuts = pd.cut( 
+    cars["weight"],     # series to cut by
+    range(1500, 5800, 1000)    # bin edges
+    )
+
+cars["cuts"] = cuts
+sns.catplot(data=cars, x="mpg", y="cuts", kind="violin");
+```
+
+### Aggregation
+
+Groups defined by `groupby` can then be passed through *aggregators* that reduce each grouped column to a single value. A list of the most common predefined aggregation functions is given in @tbl-stats-agg. 
+
+| method | effect | 
+|---------|--------|
+| `count` | Number of values in each group |
+| `mean`  | Mean value in each group |
+| `sum` |  Sum within each group  |
+| `std`, `var` | Standard deviation/variance within groups |
+| `min`, `max` | Min or max within groups |
+| `describe` | Descriptive statistics |
+| `first`, `last` | First or last of group values |
+
+: Aggregation functions. All ignore `NaN` values. {#tbl-stats-agg}
+
+```{python}
+by_weight = cars.groupby(cuts)
+by_weight["mpg"].describe()
+```
+
+If you want a more exotic operation, you can call `agg` with your own function:
+
+```{python}
+def iqr(x):
+    q1,q3 = x.quantile( [.25, .75] )
+    return q3 - q1
+
+by_weight["mpg"].agg(iqr)
+```
+
+### Transformation
+
+A transformation applies a function to each element of a column, producing a result of the same length that can be indexed the same way. This transformation can be applied group by group.
+
+For example, we can standardize to z-scores within each group separately:
+
+```{python}
+def standardize(x):
+    return (x - x.mean()) / x.std()
+
+cars["group_z"] = by_weight["mpg"].transform(standardize)
+
+sns.displot(data=cars, 
+    x="group_z", 
+    col="origin", height=2.7
+    );
+```
+
+Note how this differs from computing z-scores based on global statistics: 
+
+```{python}
+cars["global_z"] = standardize( cars["mpg"] )
+
+sns.displot(data=cars, 
+    x="global_z", 
+    col="origin", height=2.7
+    );
+```
+
+### Filtering
+
+To apply a filter, provide a function that operates on a column and returns either `True`, meaning to keep the column, or `False`, meaning to reject it. This filter is applied groupwise.
+
+For example, suppose we want to group cars by horsepower:
+
+```{python}
+cuts = pd.cut(cars["horsepower"], range(40,220,20))
+
+by_hp = cars.groupby(cuts)
+by_hp.count()
+```
+
+Say we want to drop the cars belonging to groups having fewer than 30 members:
+
+```{python}
+hp_30 = by_hp.filter( lambda x: len(x) > 29 )
+hp_30.head()
+```
+
+Notice that the result has been merged back into a single frame. If we want to work with the groups again, we have to apply the grouping anew.
+
+```{python}
+cuts = pd.cut(hp_30["horsepower"], range(40,220,20))
+hp_30.groupby(cuts)["mpg"].median()
+```
+
+<!-- 
+
+You can simultaneously use columns for one category with colors for another:
+
+```{python}
+#| column: body-outset
+sns.displot(data=cars, x="mpg", col="origin",
+    hue="cylinders", multiple="stack", height=2.5
+    );
+```
+
+Also note in the above that we asked to stack bars rather than overlap them. Other options to designate different groups are `size` and `style` (marker type). -->
+
+::: {.callout-tip}
+There is a balance to strike between a plot that is information-poor versus one that is too busy to read clearly. But you can probably fit more information comfortably than you have been accustomed to. Great data visualizations reward time spent by the reader to examine them. [Edward Tufte](https://www.edwardtufte.com/tufte/) has written several great books on this subject.
+:::
+
+
+<!-- ## Split–apply–combine
+
+One of the most important workflows in data analysis is called **split–apply–combine**:
+
+1. Split the data into groups based on a criterion (e.g., species, marital status).
+2. Apply operations to the data within each group.
+3. Combine the results from the groups.
+
+Of these, the *apply* step is typically the most complex. In fact, in pandas you rarely need to perform step 3 explicitly, as it's usually automatic.
+
+### Split
+
+For illustrations, we will load a dataset supplied with seaborn. 
+
+```{python}
+import pandas as pd
+import seaborn as sns
+
+penguins = sns.load_dataset("penguins")
+penguins
+```
+
+```{python}
+by_species = penguins.groupby("species")
+```
+
+In computer science, this is what is called a *lazy* operation: nothing is actually done yet to the data frame. It's just set up for applying future operations to each group.
+
+```{python}
+for name,group in by_species:
+    print(name)
+    print(group.iloc[:3,:4])
+    print()
+```
+
+
+### Apply
+
+The most complex step is applying operations to each group of data. There are three types of operations in pandas:
+
+Aggregation
+: Summarizing data by a single value, such as a sum or mean, or by a few values, such as value counts or quintiles.
+
+Transformation
+: Application of a mathematical operation to every data value, resulting in data indexed the same way as the original. For example, quantitative data might be transformed to lie in the interval $[0,1]$.
+
+Filtration
+: Inclusion/removal of a group based on a criterion, such as rejection of a group with too few members.
+
+As a rule of thumb, aggregation produces a single numerical result from a series, transformation changes the series to another one of the same length, and filtering extracts a subset of a series. -->
+
+
+## Outliers
+
+Informally, an **outlier** is a data value that is considered to be far from typical. In some applications, such as detecting earthquakes or cancer, outliers are the cases of real interest. But we will be thinking of them as unwelcome values that might result from equipment failure, confounding effects, mistyping a value, using an extreme value to represent missing data, and so on. In such cases we want to minimize the effect of the outliers on the statistics. 
+
+There are various ways of deciding what "typical" means, and there is no one-size recommendation for all applications. 
+
+### IQR
+
+Let's look at another data set, based on an fMRI experiment.
+
+```{python}
+import pandas as pd
+import seaborn as sns
+
+fmri = sns.load_dataset("fmri")
+fmri.head()
+```
+
+We want to focus on the *signal* column, splitting according to the *event*.
+
+```{python}
+fmri.groupby("event")["signal"].describe()
+```
+
+Here is a box plot of the signal for these groups.
+
+```{python}
+sns.catplot(data=fmri,x="event",y="signal",kind="box")
+```
+
+The dots lying outside the whiskers in the plot may be considered outliers. They are determined by the quartiles. Let $Q_1$ and $Q_3$ be the first and third quartiles (i.e., 25% and 75% percentiles), and let $I=Q_3-Q_1$ be the interquartile range (IQR). Then $x$ is an outlier value if
+
+$$ 
+x < Q_1 - 1.5I \text{ or } x > Q_3 + 1.5I.
+$$
+
+
+### Mean and STD
+
+For normal distributions, values more than twice the standard deviation $\sigma$ from the mean might be declared to be outliers; this would exclude 5% of the values, on average. A less aggressive criterion is to allow a distance of $3\sigma$, which excludes only about 0.3% of the values. The IQR criterion above corresponds to about $2.7\sigma$ in the normal case.
+
+The following plot shows the outlier cutoffs for 2000 samples from a normal distribution, using the criteria for 2σ (red), 3σ (blue), and 1.5 IQR (black).
+
+```{python}
+#| code-fold: true
+
+import matplotlib.pyplot as plt
+from numpy.random import default_rng
+randn = default_rng(1).normal 
+
+x = pd.Series(randn(size=2000))
+sns.displot(data=x,bins=30);
+m,s = x.mean(),x.std()
+plt.axvline(m-2*s,color='r')
+plt.axvline(m+2*s,color='r')
+plt.axvline(m-3*s,color='b')
+plt.axvline(m+3*s,color='b')
+
+q1,q3 = x.quantile([.25,.75])
+plt.axvline(q3+1.5*(q3-q1),color='k')
+plt.axvline(q1-1.5*(q3-q1),color='k');
+```
+
+For asymmetric distributions, or those with a heavy tail, these criteria might show greater differences.
+
+:::{.callout-note}
+A criticism of classical statistics is that much of it is conditioned on the assumption of normally distributed variables. This assumption is often violated by real datasets, and quantities that depend on normality should be used judiciously.
+:::
+
+### Removing outliers
+
+It is well known that the mean is more sensitive to outliers than the median is. 
+
+:::{#exm-stats-median-mean}
+The values $1,2,3,4,5$ have a mean and median both equal to 3. If we change the largest value to be a lot larger, say $1,2,3,4,1000$, then the mean changes to 202. But the median is still 3!
+:::
+
+Let's use IQR to remove outliers from the fmri data set. We do this by creating a Boolean-valued series indicating which rows of the frame represent outliers within their group.
+
+```{python}
+def isoutlier(x):
+    Q1,Q3 = x.quantile([.25,.75])
+    I = Q3-Q1
+    return (x < Q1-1.5*I) |  (x > Q3+1.5*I)
+
+outs = fmri.groupby("event")["signal"].transform(isoutlier)
+fmri[outs]["event"].value_counts()
+```
+
+You can see above that there are 66 outliers. To negate the outlier indicator, we can use `~outs` as a row selector.
+
+```{python}
+cleaned = fmri[~outs]
+```
+
+The median values are barely affected by the omission of the outliers.
+
+```{python}
+print("medians with outliers:")
+print(fmri.groupby("event")["signal"].median())
+print("\nmedians without outliers:")
+print(cleaned.groupby("event")["signal"].median())
+```
+
+The means show much greater change.
+
+```{python}
+print("means with outliers:")
+print(fmri.groupby("event")["signal"].mean())
+print("\nmeans without outliers:")
+print(cleaned.groupby("event")["signal"].mean())
+```
+
+For the *stim* case in particular, the mean value changes by almost 200%, including a sign change. (Relative to the standard deviation, it's closer to a 20% change.) 
+<!-- 
+## Combine
+
+It's common to form chains of operations that can be written separately or in one line. For example, consider the task of **imputation**, which is the replacement of missing values by a standard value such as the mean or median. In the penguin dataset, there are two rows with missing numerical values:
+
+```{python}
+bills = ["bill_length_mm","bill_depth_mm"]
+penguins[bills].isna().sum()
+```
+
+Given variations between species, we probably want to compute values aggregated by species. 
+
+```{python}
+by_species = penguins.groupby("species")
+by_species[bills].median()
+```
+
+In order to operate columnwise, we apply a custom transformation function using the `fillna` method to replace missing values. 
+
+```{python}
+def impute(col):
+    return col.fillna(col.median())
+
+replaced = by_species[bills].transform(impute)
+replaced
+```
+
+Replacement has happened in the row with index 3, for example. Finally, we can overwrite the columns of the original data frame, if we don't care to know in the future which values were imputed. All of the necessary steps can be compressed into one chain:
+
+```{python}
+penguins[bills] = penguins.groupby("species")[bills].transform(lambda x: x.fillna(x.median()))
+penguins
+```
+ -->
+
+## Correlation
+
+<!-- For illustrations, let's load the penguin dataset:
+
+import pandas as pd
+import seaborn as sns
+penguins = sns.load_dataset("penguins").dropna()
+penguins.head()
+-->
+
+There are often observations that we believe to be linked, either because one influences the other, or both are influenced by some other factor. That is, we say the quantities are *correlated*.
+
+There are several ways to measure correlation, but it's good practice to look at the data before jumping to the numbers.
+
+### Relational plots
+
+We can use `relplot` to make a scatter plot of two different columns in a frame:
+
+```{python}
+sns.relplot(data=cars, 
+    x="model_year", y="mpg"
+    );
+```
+
+Like the other plot types above, we can use color, column, marker size, etc. to separate the dots into groups.
+
+If we want to emphasize a trend, we can instead plot the average value at each $x$ with error bars:
+
+```{python}
+sns.relplot(data=cars, 
+    x="model_year", y="mpg",
+    kind="line", errorbar="sd"
+    );
+```
+
+The error ribbon above is drawn at one standard deviation around the mean.
+
+In order to see multiple pairwise scatter plots, we can use `pairplot` in seaborn:
+
+```{python}
+columns = [ "mpg", "horsepower", "displacement", "origin" ]
+sns.pairplot( cars[columns],
+    hue="origin", height=3
+    );
+```
+
+The panels along the diagonal show each quantitative variable's PDF. The other panels show scatter plots putting one pair at a time of the variables on the coordinate axes. 
+
+### Covariance
+
+::::{#def-stats-covariance}
+Suppose we have two series of observations, $[x_i]$ and $[y_i]$, representing observations of random quantities $X$ and $Y$ having means $\mu_X$ and $\mu_Y$. Their **covariance** is defined as 
+$$
+\Cov(X,Y) = \frac{1}{n} \sum_{i=1}^n (x_i-\mu_X)(y_i-\mu_Y).
+$$
+::::
+
+Note that the values $x_i-\mu_X$ and $y_i-\mu_Y$ are deviations from the means. It follows from the definitions that 
+$$
+\begin{split}
+    \Cov(X,X) &= \sigma_X^2, \\ 
+    \Cov(Y,Y) &= \sigma_Y^2,
+\end{split}
+$$
+i.e., self-covariance is simply variance.
+
+Covariance is not easy to interpret. Its units are the products of the units of the two variables, and it is sensitive to rescaling the variables (e.g., grams versus kilograms).
+
+### Pearson coefficient
+
+We can remove the dependence on units and scale by applying the covariance to standardized scores for both variables. The following is the best-known measure of correlation.
+
+::::{#def-stats-pearson}
+For the populations of $X$ and $Y$, the **Pearson correlation coefficient** is
+$$
+\rho(X,Y) = \frac{1}{n} \sum_{i=1}^n \left(\frac{x_i-\mu_X}{\sigma_X}\right)\left(\frac{y_i-\mu_Y}{\sigma_Y}\right)
+= \frac{\Cov(X,Y)}{\sigma_X\sigma_Y},
+$$ {#eq-stats-pearson-pop}
+where $\sigma_X^2$ and $\sigma_Y^2$ are the population variances of $X$ and $Y$.
+
+For samples from the two populations, we use
+$$
+r_{xy} =  \frac{\sum_{i=1}^n (x_i-\bar{x}) (y_i-\bar{y})}{\sqrt{\sum_{i=1}^n (x_i-\bar{x})^2}\,\sqrt{\sum_{i=1}^n (y_i-\bar{y})^2}},
+$$ {#eq-stats-pearson-samp}
+where $\bar{x}$ and $\bar{y}$ are sample means.
+::::
+
+Both $\rho_{XY}$ and $r_{xy}$ are between $-1$ and $1$, with the endpoints indicating perfect correlation (inverse or direct). 
+
+An equivalent formula for $r_{xy}$ is 
+$$
+r_{xy} =  \frac{1}{n-1} \sum_{i=1}^n \left(\frac{x_i-\bar{x}}{s_x}\right)\, \left(\frac{y_i-\bar{y}}{s_y}\right),
+$$ {#eq-stats-pearson-alt}
+where the quantities in parentheses are z-scores.
+
+::::{#exm-stats-pearson-cars}
+We might reasonably expect horsepower and miles per gallon to be inversely correlated:
+
+```{python}
+sns.relplot( data=cars,
+    x="horsepower",y="mpg"
+    );
+```
+
+Covariance allows us to confirm the relationship:
+
+```{python}
+cars[ ["horsepower", "mpg"] ].cov()
+```
+
+But should these numbers considered big? The Pearson coefficient is more helpful:
+
+```{python}
+cars[ ["horsepower", "mpg"] ].corr()
+```
+
+The value of about $-0.79$ suggests that knowing one of the values would allow us to predict the other one rather well using a best-fit straight line (more on that in a future chapter).
+::::
+
+As usual when dealing with means, however, the Pearson coefficient can be sensitive to outlier values. 
+
+::::{#exm-stats-pearson-outlier}
+The Pearson coefficient of any variable with itself is 1.
+But let's correlate two series that differ in only one element: $0,1,2,\ldots,19$, and the same sequence but with the fifth value replaced by $-100$:
+
+```{python}
+x = pd.Series( range(20) )
+y = x.copy()
+y[4] = -100
+x.corr(y)
+```
+
+Despite the change being in a single value, over half of the predictive power was lost. 
+::::
+
+### Spearman coefficient
+
+The Spearman coefficient is one way to lessen the impact of outliers when measuring correlation. The idea is that the values are used only in their orderings. 
+
+::::{#def-stats-rank-series}
+If $x_1,\ldots,x_n$ is a series of observations, let their sorted ordering be
+$$
+x_{s_1},x_{s_2},\ldots,x_{s_n}.
+$$
+Then $s_1,s_2,\ldots,s_n$ is the **rank series** of $\bfx$. 
+::::
+
+::::{#def-stats-spearman}
+The **Spearman coefficient** of two series of equal length is the Pearson coefficient of their rank series.
+::::
+
+::::{#exm-stats-spearman-outlier}
+Returning to @exm-stats-pearson-outlier, we find the Spearman coefficient is barely affected by the single outlier:
+
+```{python}
+x = pd.Series( range(20) )
+y = x.copy()
+y[4] = -100
+x.corr(y,"spearman")
+```
+
+It's trivial in this case to produce the two rank series by hand:
+
+```{python}
+s = pd.Series( range(1,21) )    # already sorted
+t = s.copy()
+t[:5] = [2,3,4,5,1]     # modified sort ordering
+
+t.corr(s)
+```
+
+As long as `y[4]` is negative, it doesn't matter what its particular value is:
+
+```{python}
+y[4] = -1000000
+x.corr(y,"spearman")
+```
+::::
+
+Since real data almost always features outlying or anomalous values, it's important to think about the robustness of the statistics you choose.
+
+### Categorical correlation
+
+An ordinal variable, such as the days of the week, is often straightforward to quantify as integers. But a nominal variable poses a different challenge. 
+
+::::{#exm-stats-catcorr}
+Grouped histograms suggest an association between country of origin and MPG:
+
+```{python}
+sns.displot(data=cars, kind="kde",
+    x="mpg", hue="origin");
+```
+
+How can we quantify the association? The first step is to convert the *origin* column into dummy variables:
+
+```{python}
+dum = pd.get_dummies(cars, columns=["origin"])
+dum.head()
+```
+
+The original *origin* column has been replaced by three binary indicator columns. Now we can look for correlations between them and *mpg*:
+
+```{python}
+columns = [
+    "mpg",
+    "origin_europe",
+    "origin_japan",
+    "origin_usa"
+    ]
+dum[columns].corr()
+```
+
+As you can see from the above, `europe` and `japan` are positively associated with *mpg*, while `usa` is inversely associated with *mpg*.
+:::: 
+
+## Cautionary tales
+
+Attaching theorem-supported numbers to real data feels precise and infallible. The theorems do what they say, of course---they're theorems---but our intuition can be a little too ready to attach significance to the numbers, causing misconceptions or mistakes. Proper visualizations can help us see through such issues.
+
+### Anscombe's quartet
+
+In 1973, Francis Anscombe created four artificial datasets in order to illustrate the perils of trusting a few numbers to describe sets of observations. These have been made available in seaborn:
+
+```{python}
+quartet = sns.load_dataset("anscombe")
+quartet.head()
+```
+
+Both the *x* and *y* variables have identical means and variances across all four of the sets:
+
+```{python}
+by_set = quartet.groupby("dataset")
+by_set.mean()
+```
+
+```{python}
+by_set.std()
+```
+
+It follows that the correlations within each set are also identical:
+
+```{python}
+by_set.corr()
+```
+
+Yet scatter plots reveal that the sets are drastically different:
+
+```{python}
+sns.relplot( data=quartet, 
+    x="x", y="y", 
+    col="dataset", col_wrap=2, height=3
+    );
+```
+
+Anscombe's quartet shows that a few summary statistics are not able to capture everything important about even a small dataset. 
+
+### Simpson's paradox
+
+The penguin dataset contains a common paradox (well, a counterintuitive phenomenon, anyway). Two of the variables show a fairly strong negative correlation:
+
+```{python}
+penguins = sns.load_dataset("penguins")
+columns = [ "body_mass_g", "bill_depth_mm" ]
+penguins[columns].corr()
+```
+
+But something surprising happens if we compute correlations *after* grouping by species.
+
+```{python}
+penguins.groupby("species")[columns].corr()
+```
+
+Within each individual species, the correlation between the variables is strongly positive!
+
+This is an example of **Simpson's paradox**. The reason for it can be seen from a scatter plot:
+
+```{python}
+sns.relplot( data=penguins,
+    x=columns[0], y=columns[1], 
+    hue="species"
+    );
+```
+
+Within each color, the positive association is clear. But what dominates the combination of all three species is the large difference between Gentoo and the others. Because the Gentoo are both larger and have shallower bills, the dominant relationship is negative. 
+
+As often happens in statistics, the precise framing of the question can strongly affect its answer. This can lead to honest mistakes by the naive as well as outright deception by the unscrupulous.
+
+## Exercises {.unnumbered}
+
+For these exercises, you may of course use computer help to work on a problem, but your answer should be self-contained without reference to computer output (unless stated otherwise).
+
+:::{#exr-stats-summary}
+For $n>2$, let $x_i=0$ for $i=1,\ldots,n-1$, and $x_n=M>0$. Find the **(a)** sample mean, **(b)** sample median, **(c)** corrected sample variance $s_{n-1}^2$, and **(d)** sample z-scores of the $x_i$ in terms of $M$ and $n$.
+:::
+
+:::{#exr-stats-z-scores}
+Suppose the samples $x_1,\ldots,x_n$ have z-scores $z_1,\ldots,z_n$. 
+
+**(a)** Show that $\displaystyle \sum_{i=1}^n z_i = 0.$
+
+**(b)** Show that $\displaystyle \sum_{i=1}^n z_i^2 = n-1.$
+:::
+
+:::{#exr-stats-outlier}
+For the sample set in @exr-stats-summary, find a value $N$ such that if $n>N$, there is at least one outlier according to the 2σ criterion.
+:::
+
+:::{#exr-stats-outlier-iqr}
+Define a population by
+
+$$
+x_i = \begin{cases}
+1, & 1 \le i \le 11, \\ 
+2, & 12 \le i \le 14,\\ 
+4, & 15 \le i \le 22, \\ 
+6, & 23 \le i \le 32.
+\end{cases}
+$$
+
+**(a)** Find the median of the population.
+
+**(b)** Which of the following are outliers according to the 1.5 IQR criterion?
+
+$$-5,0,5,10,15,20$$
+:::
+
+:::{#exr-stats-least-squares}
+Suppose that a population has values $x_1,x_2,\ldots,x_n$. Define the function 
+
+$$
+r_2(x) = \sum_{i=1}^n (x_i-x)^2.
+$$
+
+Show that $r_2$ has a global minimum at $x=\mu$, the population mean.
+:::
+
+:::{#exr-stats-least-mad}
+Suppose that $n=2k+1$ and a population has values $x_1,x_2,\ldots,x_{n}$ in sorted order, so that the median is equal to $x_k$. Define the function 
+
+$$
+r_1(x) = \sum_{i=1}^n |x_i-x|.
+$$
+
+(This function is the *total absolute deviation* of $x$ from the population.) Show that $r_1$ has a global minimum at $x=x_k$ by way of the following steps. 
+
+**(a)** Explain why the derivative of $r_1$ is undefined at every $x_i$. Consequently, all of the $x_i$ are critical points of $r_1$. 
+
+**(b)** Determine $r_1'$ within each piece of the real axis between the $x_i$, and explain why there cannot be any additional critical points to consider. (Note: you can replace the absolute values with a piecewise definition of $r_1$, where the formula for the pieces changes as you cross over each $x_i$.) 
+
+**(c)** By appealing to the derivative values between the $x_i$, explain why it must be that
+
+$$
+r_1(x_1) > r_1(x_2) > \cdots > r_1(x_k) < r_1(x_{k+1}) < \cdots < r_1(x_n).
+$$
+:::
+
+:::{#exr-stats-pearson-z}
+Prove that two sample sets have a Pearson correlation coefficient equal to 1 if they have identical z-scores. (Hint: See @exr-stats-z-scores.)
+:::
+
+:::{#exr-stats-pearson-anti}
+Suppose that two sample sets satisfy $y_i=-x_i$ for all $i$. Prove that the Pearson correlation coefficient between $x$ and $y$ equals $-1$.
+:::
+

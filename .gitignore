@@ -1,0 +1,11 @@
+.jupyter_cache/
+.quarto
+_book
+classification_files
+clustering_files
+data_files
+networks_files
+regression_files
+scratch_files
+selection_files
+stats_files

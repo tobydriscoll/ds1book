@@ -1,0 +1,49 @@
+project:
+  type: book
+  resources:
+    - _media
+
+book:
+  title: "Data Science 1"
+  author: "Tobin Driscoll"
+  date: "Jan. 2023"
+  favicon: favicon.ico
+  chapters:
+    - index.qmd
+    - intro.qmd
+    - data.qmd
+    - stats.qmd
+    - classification.qmd
+    - selection.qmd
+    - regression.qmd
+    - clustering.qmd
+    - networks.qmd
+    # - references.qmd
+  comments:
+    hypothesis: true
+# number-depth: 3
+
+bibliography: references.bib
+
+execute: 
+  cache: true
+  kernelspec:
+    name: "python3"
+    language: "python"
+    display_name: "Python (datasci)"
+
+format:
+  html:
+    theme: 
+      - flatly
+      - tweaks.scss
+    # css: tweaks.css
+    code-copy: true
+    include-in-header: header.html
+  pdf:
+    papersize: letter
+    include-in-header: _macros.tex
+    #   documentclass: scrreprt
+
+
+

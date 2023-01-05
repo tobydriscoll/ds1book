@@ -1,0 +1,664 @@
+# Model selection
+{{< include _macros.qmd >}}
+
+```{python}
+#| code-fold: true
+import numpy as np
+from numpy.random import default_rng
+import pandas as pd
+import seaborn as sns
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
+from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+```
+
+We have barely scratched the surface of the universe of classification algorithms. Even just the two types we have seen, nearest neighbors and decision trees, have multiple variations and options available through *hyperparameters*.
+
+::::{#def-select-hyper}
+A **hyperparameter** of a learning algorithm is a value or setting affecting the algorithm that remains fixed throughout training.
+::::
+
+:::{.callout-note}
+In ML, a *parameter* is a value that is adjusted during training; i.e., it is learned from the training data. In most of mathematics, we would refer to these as *variables*, but in ML that term is often understood to be synonymous with *feature*.
+:::
+
+Some hyperparameters, such as the choice of norm in the nearest-neighbors algorithm, have an influence that is not easy to characterize. But others clearly affect the potential expressive power of the algorithm. 
+
+::::{#exm-select-hyper}
+The maximum depth $r$ of a decision tree limits the complexity that the tree can attain. When $r=1$, the tree can divide the data only once and assign different values to the different sides. On the other hand, the tree can assign up to $2^r$ unique values, which grows exponentially with $r$; in fact, any training set of that size or smaller can be modeled with 100% training accuracy.
+
+For a kNN classifier, when $k$ is as large as the number of samples, the classifier can only take one value on the entire set---all the samples have a vote everywhere. The other extreme is $k=1$, where each sample rules within its own neighborhood, and again we achieve 100% training accuracy.
+::::
+
+Options provide flexibility but also demand rationales for their use. How can we choose the best hyperparameters for a given problem? And how do we choose the best algorithm overall? In order to answer these questions, we must first understand what to expect from the results of a learner in general terms.
+
+## Bias--variance tradeoff {#sec-select-learning-curves}
+
+When we train a classifier, we use a particular set of training data. In a different parallel universe, we might have been handed a different training set drawn from the same overall population. While we might be optimistic and hope for the best-case scenario of a training set that is perfectly representative, it's more prudent to consider what's best in the average case.
+
+### Learner bias
+
+Suppose that $f(x)$ is a perfect labeller, i.e., a function with 100% accuracy over an entire population. For simplicity, we can imagine that $f$ is a binary classifier, i.e., $f(x) \in \{0,1\}$, although this assumption is not essential.
+
+Let $\hat{f}(x)$ denote a classification function obtained after training. It depends on the particular training set we used. Suppose there are $N$ total possible training sets, leading to labelling functions 
+$$
+\hat{f}_1(x),\hat{f}_2(x),\dots,\hat{f}_N(x). 
+$$
+Then we define the **expected value** of the classifier as the average over all training sets:
+$$
+\E{\hat{f}(x)} = \frac{1}{N} \sum_{i=1}^N \hat{f_i}(x).
+$$
+
+::: {.callout-note}
+Except on toy problems, we don't know how to calculate this average. This is more of a thought experiment. But we will simulate the idea later on.
+:::
+
+The term *expected* doesn't mean that we anticipate getting this answer for our particular $\hat{f}$. It's just what we would get by averaging over all parallel universes that received unique training sets. 
+
+We can apply the expectation operator $\mathbb{E}$ to any function of $x$. In particular, the expected error in our own universe's prediction is
+$$
+\begin{split}
+	\E{f(x) - \hat{f}(x)} &= \frac{1}{N} \sum_{i=1}^N \left( f(x) - \hat{f_i}(x) \right) \\
+  &= \frac{1}{N} \left( \sum_{i=1}^N  f(x)  \right) - \frac{1}{N}\left( \sum_{i=1}^N \hat{f_i}(x) \right) \\ 
+  &= f(x) - \E{\hat{f}(x)}.
+\end{split}
+$$
+We will set $y=f(x)$ as the true label and $\hat{y}=\E{\hat{f}(x)}$ as the expected prediction. The quantity above, $y-\hat{y}$, is called the **bias** of the classifier. Bias depends on the particular algorithm and its hyperparameters. Each architecture can reproduce a function of limited complexity. 
+
+### Variance
+
+It might seem as though the only important goal is to minimize the bias. To see why this is not the case, imagine that you are playing a ring toss game at a carnival. You have an array of sticks on a grid laid out horizontally in front of you, and the goal is to toss rings so that they land surrounding any one of the sticks. 
+
+One strategy is to aim for the middle of the grid, because missing in any direction still gives you a chance to score. This is like aiming directly for the mean position. However, it's likely that you have more consistency with shorter throws than longer ones: the farther away your aiming point is, the more variation there will be in the landing spots. Hence, it might be superior to aim at a closer stick. Even though throws that are too short may have no chance at scoring, you will do better due to the decreased spread of your throws.
+
+In essence, you have only a finite---probably small---number of throws to make, so the performance of the average case isn't the only consideration. Reducing variance can improve your odds of getting close, even if the average case is mediocre.
+
+To see this tradeoff mathematically, we can compute the variance of the predicted labels at any $x$:
+$$
+\begin{split}
+	\E{(y - \hat{y})^2} &= \frac{1}{N} \sum_{i=1}^N \left( y - \hat{f_i}(x) \right)^2 \\   
+	&= \frac{1}{N} \sum_{i=1}^N \left( y - \hat{y} + \hat{y} - \hat{f_i}(x) \right)^2  \\ 
+	&= \frac{1}{N} \sum_{i=1}^N \left( y - \hat{y} \right)^2 + \frac{1}{N} \sum_{i=1}^N \left( \hat{y}  - \hat{f}_i(x) \right)^2 \\ 
+  & \qquad - 2 \left( y - \hat{y} \right) \cdot \frac{1}{N}\sum_{i=1}^N \left( \hat{y}  - \hat{f}_i(x) \right).  
+\end{split}
+$$
+Now we find something interesting:
+$$
+\frac{1}{N} \sum_{i=1}^N \left( \hat{y}  - \hat{f}_i(x) \right) = 
+\hat{y} - \frac{1}{N} \sum_{i=1}^N \hat{f}_i(x) = 0,
+$$
+by the definition of $\hat{y}$. So overall,
+$$
+\begin{split}
+	\E{(y - \hat{y})^2} &= \frac{1}{N} \sum_{i=1}^N \left( y - \hat{y} \right)^2 + \frac{1}{N} \sum_{i=1}^N \left( \hat{y}  - \hat{f}_i(x) \right)^2 \\ 
+  &= (y-\hat{y})^2 + \E{\left(\hat{y} - \hat{f}(x)\right)^2}
+\end{split}
+$$
+The first term is the squared bias. The second is the **variance** of the learning method. In words, the variance of the learning process has two contributions:
+
+Bias
+: How close is the average prediction to the ground truth? 
+Variance
+: How close to the average prediction is any one prediction likely to be?
+
+Why would these two factors be in opposition? When a learning method has the capacity to capture complex behavior, it potentially has a low bias. However, that same capacity means that the learner will fit itself very well to each individual training set, which increases the potential for variance over the whole collection of training sets. 
+
+This tension is known as the *bias--variance tradeoff*. Perhaps we can view this tradeoff as a special case of *Occam's Razor*: it's best to choose the least complex method necessary to reach a particular level of explanatory power.
+
+### Learning curves 
+
+We can illustrate the tradeoff between bias and variance by running an artificial experiment with different sizes for the training datasets. 
+
+::::{#exm-select-learning-curves}
+We will use a subset of a realistic data set used to predict the dominant type of tree in patches of forest. We train a decision tree classifier with fixed depth throughout. (Don't confuse the forest data for the tree classifier, haha.)
+
+```{python}
+forest = datasets.fetch_covtype()
+X = forest["data"][:250000,:8]   # 250,000 samples, 8 dimensions
+y = forest["target"][:250000]
+X_tr, X_te, y_tr, y_te = train_test_split(
+    X, y,
+    test_size=0.05, 
+    shuffle=True, random_state=0
+)
+
+alln = range(200, 4001, 200)       # sizes of the training subsets
+results = []                       # for tracking results
+tree = DecisionTreeClassifier(max_depth=4) 
+for n in alln:             # iterate over training set sizes
+    for i in range(50):    # iterate over training sets
+        X_tr, y_tr = shuffle(X_tr, y_tr, random_state=i)
+        XX, yy = X_tr[:n,:], y_tr[:n]       # training subset of size n
+        tree.fit(XX, yy)
+        results.append( ("train", n, 1-tree.score(XX,yy)) )
+        results.append( ("test", n, 1-tree.score(X_te, y_te)) )
+
+cols = [ "kind", "training set size", "error" ]
+results = pd.DataFrame(results, columns=cols)
+sns.relplot(data=results, 
+    x=cols[1], y=cols[2], 
+    kind="line", errorbar="sd", hue=cols[0]
+);
+```
+
+The plot above shows **learning curves**. The solid line is the mean result over all trials, and the ribbon has a width of one standard deviation. For a small training set, the tree has more than enough resolving power, and the result is severe overfitting, as seen by the large gap between testing and training. As the size of the training set grows, however, variance decreases and the two error measurements come together. 
+
+Note that the curves seem to approach a horizontal asymptote at a nonzero level of error. This level indicates an unavoidable bias for this tree size, no matter how much of the data we throw at it. As a simple analogy, think about approximating curves in the plane by a parabola. You will be able to do a perfect job for linear and quadratic functions, but if you approximate a cosine curve, you can't get it exactly correct no matter how much information you have about it. 
+::::
+
+When you see a large gap between training and test errors, you should suspect that the learner will not generalize well. Ideally, you could bring more data to the table, perhaps by artificially augmenting the training examples. If not, you might as well decrease the resolving power of your learner, because the excess power is likely to make things no better, and maybe worse.
+
+## Overfitting
+
+One important factor we have not yet considered is noise in the training data---that is, erroneous values. If a learner responds too adeptly to isolated wrong values, it will also respond incorrectly to other nearby inputs. This situation is known as **overfitting**.
+
+<!-- As a demonstration, consider the case of representing 5 points by a polynomial. One option is to 
+```{python}
+import numpy as np
+from numpy.polynomial import Polynomial as P
+import matplotlib.pyplot as plt
+x = np.arange(5)/4
+y = [1,0.99,1,0.99,1]
+
+xx = np.arange(400)/399
+
+plt.scatter(x, y, 20, color="black")
+
+p = P.fit(x, y, 4)
+plt.plot(xx, p(xx))
+
+p = P.fit(x, y, 1)
+plt.plot(xx, p(xx))
+plt.ylim(0.85,1.05)
+
+plt.legend(("data","degree 4","degree 1"))
+
+```
+
+In @sec-select-learning-curves we saw that if too little data is supplied to a learner, there is a large gap between training error and generalization as measured on a testing set.  -->
+
+<!-- 
+
+, referring to the idea that the learner adapts 
+
+as the amount of training data increases for a particular learner, the training set variance decreases until the learner approximately reaches a steady state of essential bias. In practice, we usually leave the training set data fixed and adjust the hyperparameters. It becomes important, then, to detect when increasing the resolving power stops reducing bias and serves only to increase dependence on the training set.  -->
+
+
+### Overfitting in kNN
+
+```{python}
+#| echo: false
+import matplotlib.pyplot as plt
+
+def overfit(n,learner,num_wrong):
+    rng = default_rng(19716)    # giving an initial state
+
+    idx = np.arange(n)
+
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = prop_cycle.by_key()['color']
+
+    for iter in range(4):
+        x = rng.uniform(-1,1,size=(n))
+        y = np.sign(x)
+
+        rng.shuffle(idx)
+        y[idx[:num_wrong]] *= -1
+        
+        learner.fit(x.reshape(n,1), y)
+
+        xx = np.arange(-1,1,0.005)
+        yy = learner.predict(xx.reshape(-1,1))
+
+        ax = plt.subplot(2,2,iter+1,xticks=[-1,0,1],yticks=[-1,0,1])
+        ax.plot(xx,yy,color=colors[0])
+        ax.scatter(x,y,s=8,color=colors[1])
+```
+
+Consider a kNN classifier with $k=1$. The class assigned to each value is just that of the nearest training example, making for a piecewise constant labelling. Let's see how this plays out in about as simple a classification problem as we can come up with: a single feature, with the class being the sign of the feature's value. (We arbitrarily assign zero to have class $+1$.) 
+
+Using $k=1$ produces fine results, as shown here for 4 different training sets of size 40:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: kNN with k=1 and perfect data
+#| label: fig-select-knn-1-clean
+overfit(40,KNeighborsClassifier(n_neighbors=1),0)
+```
+
+Now suppose we use training sets that have just 3 mislabeled examples each. Here are some resulting classification functions:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: kNN with k=1 and noisy data
+#| label: fig-select-knn-1-noisy
+overfit(40,KNeighborsClassifier(n_neighbors=1),3)
+```
+
+Every sample is its own nearest neighbor, so this classifier responds to noisy data by reproducing it perfectly, which interferes with the larger trend we actually want to capture. This is an extreme example of overfitting.
+
+Now let's bump up to $k=3$. The results are more like we want, even with noisy data:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: kNN with k=3 and noisy data
+#| label: fig-select-knn-3-noisy
+overfit(40,KNeighborsClassifier(n_neighbors=3),3)
+```
+
+The voting mechanism of kNN allows the classifier to ignore isolated outliers. If we continue to $k=7$, then the 3 outliers will never be able to outvote the correct values:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: kNN with k=7 and noisy data
+#| label: fig-select-knn-7-noisy
+overfit(40,KNeighborsClassifier(n_neighbors=7),3)
+```
+
+Note above that the decision boundary is still affected by the noisy values, so some of the more-borderline predictions are wrong, but clearer cases are always handled correctly.
+
+::: {.callout-caution}
+The lesson here is not simply that "bigger $k$ is better." In the extreme case of $k=21$ above, the classifier will predict the same value everywhere! If the true classification boundary were more complicated (i.e., if the classes switched back and forth at high frequency), using even $k=7$ would be unable to capture many of the details. 
+:::
+
+### Overfitting in decision trees
+
+
+As mentioned in @exm-select-hyper, the depth of a decision tree correlates with its ability to parse the samples more finely. For $n=40$ values, a tree of depth 6 is guaranteed to reproduce every sample value perfectly. With noisy data, we see clear signs of overfitting:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: Decision tree with depth=6 and noisy data
+#| label: fig-select-tree-6-noisy
+overfit(40,DecisionTreeClassifier(max_depth=6),3)
+```
+
+Using a shallower tree reduces the extent of overfitting:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: Decision tree with depth=3 and noisy data
+#| label: fig-select-tree-3-noisy
+overfit(40,DecisionTreeClassifier(max_depth=3),3)
+```
+
+We can eliminate the overfitting completely and get a single point as the decision boundary, although its location still might not be ideal:
+
+```{python}
+#| echo: false 
+#| fig-align: center
+#| fig-cap: Decision tree with depth=2 and noisy data
+#| label: fig-select-tree-2-noisy
+overfit(40,DecisionTreeClassifier(max_depth=2),3)
+```
+
+### Overfitting and variance
+
+The tendency to fit closely to training data also implies that the learner may have a good deal of variance in training (see @fig-select-knn-1-noisy, and @fig-select-tree-6-noisy, for example). Thus, overfitting is often associated with a large gap between training and testing variance, as observed in @sec-select-learning-curves. 
+
+::::{#exm-select-overfit-forest}
+Returning to the forest data from @exm-select-learning-curves, we try decision trees of maximum depth $r=12$ on 100 random training subsets of size 5000:
+
+```{python}
+#| code-fold: true
+forest = datasets.fetch_covtype()
+X = forest["data"][:50000,:8]
+y = (forest["target"][:50000] == 1)
+
+def experiment(learner, X, y, n):
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        X, y,
+        test_size=0.2,
+        shuffle=True,
+        random_state=1
+    )
+    results = [] 
+    for i in range(100):
+        X_tr, y_tr = shuffle(X_tr, y_tr, random_state=i)
+        XX, yy = X_tr[:n,:], y_tr[:n]
+        learner.fit(XX, yy) 
+        err = 1 - balanced_accuracy_score(yy, learner.predict(XX))
+        results.append( ("train", err) )   # training error
+        err = 1 - balanced_accuracy_score(y_te, learner.predict(X_te))
+        results.append( ("test", err) )    # test error
+
+    results = pd.DataFrame( results, columns=["kind", "error"] )
+    sns.displot(data=results, x="error", hue="kind", bins=20);
+```
+
+```{python}
+#| label: fig-select-overfit-forest
+#| fig-caption: Results from an overfit decision tree
+tree = DecisionTreeClassifier(max_depth=12)
+experiment(tree, X, y, 5000)
+```
+
+Since $2^{12}=4096$, this tree is probably overfit to the training data, and we also see the wide separation between training and testing that suggests the training does not generalize well. With a depth of $r=4$, the training and testing results completely overlap:
+
+```{python}
+tree = DecisionTreeClassifier(max_depth=4)
+experiment(tree, X, y, 5000)
+```
+
+However, notice above that the testing error increased substantially from the overfit case. 
+::::
+
+We could say that the last tree in @exm-select-overfit-forest is actually *underfit* to the data: the behavior of the data is probably too complex to be replicated well by such a shallow tree. We have encountered the bias--variance tradeoff again.
+
+## Ensemble methods
+
+When a relatively expressive learning model is used, overfitting and strong dependence on the training set are possible. One meta-strategy for reducing training variance without decreasing the model expressiveness is to use an **ensemble** method. 
+
+The idea of an ensemble is that averaging over many different training sets will reduce the variance that comes from overfitting. It's much like trying to simulate the computation we used in the theory of expected values. The most common way to construct the training sets is called *bootstrap aggregation*, or **bagging** for short, in which samples are drawn randomly from the original training set. (Usually this is done *with replacement*, which means that some samples might be selected multiple times.)
+
+Sklearn has a `BaggingClassifier` that automates the process of generating an ensemble from just one basic type of estimator. 
+
+::::{#exm-select-ensemble-knn}
+Here is a dataset collected from images of dried beans:
+
+```{python}
+beans = pd.read_excel("Dry_Bean_Dataset.xlsx")
+X = beans.drop("Class", axis=1)
+X.head()
+```
+
+Although the dataset has data on 7 classes of beans, we will simplify our output by making it a one-vs-rest problem for just one class:
+
+```{python}
+y = beans["Class"] == "DERMASON"
+```
+
+Here is the confusion matrix we get from training a single kNN classifier on this dataset:
+
+```{python}
+#| code-fold: true
+X_tr, X_te, y_tr, y_te = train_test_split(
+  X, y,
+  test_size=0.2,
+  shuffle=True,
+  random_state=1
+)
+
+pipe = make_pipeline(StandardScaler(), KNeighborsClassifier(n_neighbors=3))
+
+pipe.fit(X_tr, y_tr)
+yhat = pipe.predict(X_te)
+
+print( confusion_matrix(y_te, yhat, labels=[True,False]) )
+```
+
+Here, we create an ensemble with 100 such classifiers, each trained on a different subset of size 40% of the size of the original training set:
+
+```{python}
+from sklearn.ensemble import BaggingClassifier
+
+ensemble = BaggingClassifier( 
+    pipe, 
+    max_samples=0.75,
+    n_estimators=100,
+    random_state=0
+    )
+
+ensemble.fit(X_tr, y_tr)
+yhat = ensemble.predict(X.iloc[:1,:])
+print("prediction on first sample is", 
+    bool(yhat[0])
+    )
+```
+
+The `estimators_` field of the ensemble object is a list of the individual trained classifiers. With a little work, we can manually tally up the number that vote `True` on a query:
+
+```{python}
+query = X.to_numpy()[:1,:]   # must use an array
+yy = [ model.predict(query)[0] for model in ensemble.estimators_ ]
+print(f"{sum(yy) / len(yy):.0%} vote for True")
+```
+
+Since only 26% vote `True`, the prediction of the ensemble is `False`, as printed out above. Over the testing set, we find some improvement in the confusion matrix:
+
+```{python}
+yhat = ensemble.predict(X_te)
+print( confusion_matrix(y_te, yhat, labels=[True,False]) )
+```
+::::
+
+::::{#exm-select-ensemble-forest}
+Let's return to the experiment of @exm-select-overfit-forest, where we found that a decision tree of depth $r=12$ was badly overfit. Now we use an ensemble of 50 such trees:
+
+```{python}
+#| code-fold: true
+forest = datasets.fetch_covtype()
+X = forest["data"][:50000,:8]
+y = (forest["target"][:50000] == 1)
+
+tree = DecisionTreeClassifier(max_depth=12)
+ensemble = BaggingClassifier( 
+    tree,               # model used in each estimator
+    max_samples=0.25,   # fraction of data to use for each
+    n_estimators=50,
+    random_state=0,
+    n_jobs=-1            # use processes in parallel
+    )
+experiment(ensemble, X, y, 5000)
+```
+
+Compared to the earlier experiment (see @fig-select-overfit-forest), the separation between training and testing was greatly reduced, although seemingly at a small cost to the bias. 
+::::
+
+::: {.callout-note}
+An ensemble of decision trees is known as a **random forest**. We could have used a `RandomForestClassifier` to accomplish the bagged decision tree ensemble in @exm-select-ensemble-forest. 
+:::
+
+In addition to training on random subsets of the data, a bagging classifier can use random subsets of features (i.e., dimensions). The purpose again is to increase the diversity of the individual estimators in order to make the ensemble more robust.
+
+Ensembles can be constructed for any individual model type. Their chief disadvantage is the need to repeat the fitting process multiple times, although this can be mitigated by computing the fits in parallel. For random forests in particular, we also lose the potential for interpreting the decision process the way we can for an individual tree.
+
+## Validation
+
+We now return to the opening questions of this chapter: how should we determine optimal hyperparameters and algorithms? 
+
+It's tempting to compute test scores over a range of hyperparameter choices and simply choose the cast that scores best. That amounts to inspecting the graphs and values in the examples above and choosing the best outcomes. However, if we base hyperparameter optimization on a fixed test set, then we are effectively learning from that set! The hyperparameters might become too tuned---i.e., overfit---to our particular choice of the test set. 
+
+To avoid this pitfall, we can split the data into *three* subsets for training, **validation**, and testing. The validation set is used to tune hyperparameters. Once training is performed at values determined to be best on validation, the test set is used to assess the generalization of the optimized learner. 
+
+Unfortunately, a fixed three-way split of the data further reduces the amount of data available for training, which we often want to avoid.
+
+### Cross-validation
+
+In **cross-validation**, each learner is trained multiple times using unique training and validation sets drawn from the same pool. The most common version is **$k$-fold cross-validation**:
+
+1. Divide the original data into training and testing sets. 
+2. Further divide the training data set into $k$ roughly equal parts called *folds*. 
+3. Train a learner using folds $2,3,\ldots,k$ and validate on the cases in fold 1. Then train another learner on folds $1,3,\ldots,k$ and validate against the cases in fold 2. Continue until each fold has served once for validation. 
+4. Select the hyperparameters producing the best validation score and retrain on the entire training set.
+5. Assess performance using the test set. 
+
+A variation is **stratified** $k$-fold, in which the division in step 2 is constrained so that the relative membership of each class is the same in every fold as it is in the full training set. This is advisable when one or more classes is scarce and might otherwise become underrepresented in some folds.
+
+::::{#exm-select-folds}
+Here is how 16 elements can be split into 4 folds:
+
+```{python}
+from sklearn.model_selection import KFold
+
+kf = KFold(n_splits=4, shuffle=True, random_state=0)
+for train,test in kf.split(range(16)): 
+    print("train:", train, ", test:", test)
+```
+::::
+
+::::{#exm-select-cv-beans}
+Let's apply cross-validation to the beans dataset. 
+
+```{python}
+beans = pd.read_excel("Dry_Bean_Dataset.xlsx")
+X = beans.drop("Class", axis=1)
+y = beans["Class"]
+
+X_tr, X_te, y_tr, y_te = train_test_split(
+    X, y,
+    test_size=0.15, 
+    shuffle=True, random_state=0
+    )
+```
+
+A round of 6-fold cross-validation on a standardized kNN classifier looks like the following:
+
+```{python}
+from sklearn.model_selection import cross_validate
+
+knn = KNeighborsClassifier(n_neighbors=5)
+learner = make_pipeline(StandardScaler(), knn)
+
+kf = KFold(n_splits=6, shuffle=True, random_state=0)
+scores = cross_validate(
+    learner, 
+    X_tr, y_tr, 
+    cv=kf,
+    scoring="balanced_accuracy"
+    )
+
+print("Validation scores:")
+print( scores["test_score"] )
+```
+
+The low variance across the folds that we see above is reassurance that they are representative. Conversely, if the scores were spread more widely, we would be concerned that there was too much dependence on the training set, which might indicate overfitting.
+::::
+
+### Hyperparameter tuning
+
+If we perform cross-validations as we vary a hyperparameter, we get a **validation curve**. 
+
+::::{#exm-select-vc-beans}
+Here is a validation curve for the maximum depth of a decision tree classifier on the beans data:
+
+```{python}
+from sklearn.model_selection import StratifiedKFold
+
+depths = range(4, 16, 1)
+kf = StratifiedKFold(n_splits=8, shuffle=True, random_state=2)
+results = []    # for keeping results
+for d in depths:
+    tree = DecisionTreeClassifier(max_depth=d, random_state=1)
+    cv = cross_validate(tree, 
+        X_tr, y_tr, 
+        cv=kf, 
+        scoring="balanced_accuracy",
+        n_jobs=-1
+        )
+    for err in 1 - cv["test_score"]:
+      results.append( (d, err) )
+
+results = pd.DataFrame(results, columns=["depth", "error"] )
+sns.relplot(data=results, 
+    x="depth", y="error", 
+    kind="line", errorbar="sd"
+    );
+```
+
+Initially the error decreases because the shallowest decision trees are underfit. The minimum error is at max depth 9, after which overfitting seems to take over:
+
+```{python}
+results.groupby("depth").mean()
+```
+
+We can now train this optimal classifier on the entire training set and measure performance on the reserved testing data:
+
+```{python}
+tree = DecisionTreeClassifier(max_depth=9, random_state=1)
+tree.fit(X_tr, y_tr)
+yhat = tree.predict(X_te)
+print( "score is", balanced_accuracy_score(y_te, yhat) )
+```
+::::
+
+#### Grid search 
+When there is a single hyperparameter in play, the validation curve is useful way to optimize it. When multiple hyperparameters are available, it's common to perform a *grid search*, in which we try cross-validated fitting using every specified combination of parameter values. 
+
+::::{#exm-select-grid-cancer}
+Let's work with a dataset on breast cancer detection:
+
+```{python}
+from sklearn.datasets import load_breast_cancer
+
+cancer = load_breast_cancer(as_frame=True)["frame"]
+X = cancer.drop("target", axis=1)
+y = cancer["target"]
+
+X_tr, X_te, y_tr, y_te = train_test_split(
+    X, y, 
+    test_size=0.15, 
+    shuffle=True, random_state=2
+    )
+X_te.head()
+```
+
+We start by trying decision tree classifiers in which we vary the maximum depth as well as some other options.
+
+```{python}
+from sklearn.model_selection import GridSearchCV
+
+grid = { "criterion":["gini", "entropy"], 
+         "max_depth":range(2, 15), 
+         "min_impurity_decrease":np.arange(0,0.01,0.002) }
+learner = DecisionTreeClassifier(random_state=1)
+kf = KFold(n_splits=4, shuffle=True, random_state=0)
+
+grid_dt = GridSearchCV(learner, grid, 
+    scoring="f1", 
+    cv=kf,
+    n_jobs=-1
+    )
+grid_dt.fit(X_tr, y_tr)
+
+print("Best parameters:")
+print(grid_dt.best_params_)
+print()
+print("Best score:")
+print(grid_dt.best_score_)
+```
+
+Next, we do the same search over kNN classifiers. We always use standardization as a preprocessor; note how the syntax of the grid search is adapted:
+
+```{python}
+grid = { "kneighborsclassifier__metric":["euclidean", "manhattan"], 
+         "kneighborsclassifier__n_neighbors":range(1, 20), 
+         "kneighborsclassifier__weights":["uniform", "distance"] }
+learner = make_pipeline(StandardScaler(), KNeighborsClassifier())
+grid_knn = GridSearchCV(learner, grid, 
+    scoring="f1", 
+    cv=kf,
+    n_jobs=-1
+    )
+grid_knn.fit(X_tr, y_tr)
+grid_knn.best_params_, grid_knn.best_score_
+```
+
+Each fitted grid search object is itself a classifier that was trained on the full training set at the optimal hyperparameters:
+
+```{python}
+score = lambda cl, X, y: f1_score( y, cl.predict(X) )
+
+print("best tree f1 score:",score(grid_dt, X_te, y_te))
+print("best knn f1 score:",score(grid_knn, X_te, y_te))
+```
+
+:::{.callout-note}
+It may be instructive to rerun the competition above using different random seeds. The meaningfulness of the results is limited by their sensitivity to such choices.  Don't let floating-point values give you a false feeling of precision!
+:::
+::::
+
+#### Alternatives to grid search
+
+Grid search is a brute-force approach. It is *embarrassingly parallel*, meaning that different processors can work on different locations on the grid at the same time. But it is usually too slow for large training sets, or when the search space has more than two dimensions. In such cases you can try searching over crude versions of the grid, perhaps with just part of the training data, and gradually narrow the search while using all the data. When desperate, one may try a randomized search and to guide the process with experience and intuition.

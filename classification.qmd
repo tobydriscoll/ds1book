@@ -1,0 +1,1068 @@
+# Classification
+{{< include _macros.qmd >}}
+
+Machine learning is the use of data to tune algorithms for making decisions or predictions. Unlike deduction based on reasoning from principles governing the application, machine learning is a "black box" that just adapts via training.
+
+We divide machine learning into three major forms: 
+
+Supervised learning
+: The training data only examples that include the answer (or **label**) we expect to get. The goals are to find important effects and/or to predict labels for previously unseen examples.
+
+Unsupervised learning
+: The data is unlabeled, and the goal is to discover structure and relationships inherent to the data set.
+
+Reinforcement learning
+: The data is unlabeled, but there are known rules and goals that can be encouraged through penalties and rewards.
+
+We start with supervised learning, which can be subdivided into two major areas:
+
+* **Classification**, in which the algorithm is expected to choose from among a finite set of options.
+* **Regression**, in which the algorithm should predict the value of a quantitative variable.
+
+Most algorithms for one of these problems have counterparts in the other. 
+
+## Classification basics
+
+A single training example or sample is characterized by a **feature vector** $\bfx$ of $d$ real numbers and a **label** $y$ drawn from a finite set $L$. If $L$ has only two members (say, "true" and "false"), we have a **binary classification** problem; otherwise, we have a **multiclass** problem.
+
+When we have $n$ training samples, it's natural to collect them into columns of a **feature matrix** $\bfX$ with $n$ rows and $d$ columns. 
+Using subscripts to represent the indexes of the matrix, we can write
+
+$$
+\bfX = \begin{bmatrix}
+X_{11} & X_{12} & \cdots & X_{1d} \\
+X_{21} & X_{22} & \cdots & X_{2d} \\
+\vdots & \vdots && \vdots \\ 
+X_{n1} & X_{n2} & \cdots & X_{nd} 
+\end{bmatrix}.
+$$
+
+:::{.callout-important}
+A 2D array or matrix has elements that are addressed by two subscripts. These are always given in order *row*, *column*.
+
+In math, we usually start the row and column indexes at 1, but Python starts them at 0. 
+:::
+
+Each row of the feature matrix is a single feature vector, while each column is the value for a single feature over the entire training set.
+
+::: {#exm-class-basketball}
+Suppose we want to train an algorithm to predict whether a basketball shot will score. For one shot, we might collect three coordinates to represent the launch point, three to represent the launch velocity, and three to represent the initial angular rotation (axis and magnitude). Thus each shot will require a feature vector of length 9. A collection of 200 sample shots would be encoded as a $200\times 9$ feature matrix.
+:::
+
+We can also collect the associated training labels into the **label vector**
+
+$$
+\bfy = \begin{bmatrix} 
+y_1 \\ y_2 \\ \vdots \\ y_n
+\end{bmatrix}
+$$
+
+:::{.callout-important}
+In linear algebra, the default shape for a vector is usually as a single column. In Python, a vector doesn't exactly have a row or column orientation, though when it matters, a row shape is usually preferred.
+:::
+
+Each component $y_i$ of the label vector is drawn from the label set $L$.
+
+<!-- ### One-vs-rest
+
+Many classification algorithms are derived for binary classification problems, in which there are only two unique labels. There are automatic ways of upgrading this capability to a multiclass problem. Probably the most useful one is the **one versus rest** or *one versus all* method. 
+
+Suppose the label set $L$ has $m > 2$ members, which we can arbitrarily denote by the integers $1$ through $m$. We can define $m$ separate binary classification problems with the true/false label sets
+$$
+L_k = \{ y=k, y\neq k\},
+$$
+for each $k=1,2,\ldots,m$.  -->
+
+### Encoding qualitative data
+
+We have defined the features as numerical values. What should we do with qualitative data? We could arbitrarily assign numbers to possible values, such as "0=red", "1=blue", "2=yellow," and so on. But this is not ideal: most of the time, we would not want to say that yellow is twice as far from red as it is from blue!
+
+A better strategy is to use the one-hot or dummy encoding. If a particular feature can take on $k$ unique values, then we introduce $k$ new features indicating which value is present. (We can use $k-1$ dummy features if we interpret all-zeros to mean the $k$th possibility.)
+
+### Walkthrough
+
+The *scikit-learn* package `sklearn` is a collection of well-known machine learning algorithms and tools. It includes a few classic example datasets. We will load one derived from automatic recognition of handwritten digits. 
+
+```{python}
+from sklearn import datasets 
+ds = datasets.load_digits()        # loads a well-known dataset
+X, dig = ds["data"], ds["target"]      # assign feature matrix and label vector
+print("The feature matrix has shape", X.shape)
+print("The label vector has shape", dig.shape)
+n, d = X.shape
+print("there are", d, "features and", n, "samples")
+```
+
+It happens that the 64 features are the pixel grayscale values from an $8\times 8$ bitmap of a handwritten digit. The labels are the integer values 0 through 9, indicating the true value of the digit.
+
+Let's consider the binary problem, "is this digit a 6?" That implies the following label vector:
+
+```{python}
+y = (dig == 6)
+print("Number of sixes in training set:", sum(y))
+```
+
+The process of training a classifier is called **fitting**. We first have to import a particular classifier type, then create an instance of that type. Here, we choose one that we will study in a future section:
+
+```{python}
+from sklearn.neighbors import KNeighborsClassifier
+knn = KNeighborsClassifier(n_neighbors=20)    # specification of the model
+```
+
+Now we can fit the learner to the training data:
+
+```{python}
+knn.fit(X, y)                                 # training of the model
+```
+
+At this point, the classifier object `knn` has figured out what it needs from the training data. It has methods we can now call to make predictions and evaluate the quality of the results. 
+
+Each new prediction is for a **query vector** with 64 features. In practice, we can use a list in place of a vector for the query. 
+
+```{python}
+query = [20]*d    # list with d copies of 20  
+```
+
+The `predict` method of the classifier allows specifying multiple query vectors as rows of an array. In fact, it expects a 2D array in all cases, even if there is just one row.
+
+```{python}
+Xq = [ query ]    # 2D array with a single row
+```
+
+The result of the prediction will be a vector of labels, one per row of the query.
+
+```{python}
+# Get vector of predictions:
+knn.predict(Xq)  
+```
+
+:::{.callout-important}
+The `predict` method requires a vector or list of query vectors or lists and it outputs a vector of classes. This is true even if there is just a single query.
+:::
+
+At the moment, we don't have any realistic query data at hand other than the training data. But we can investigate the question of how well the classifier does on that data, simply by using the feature matrix as the query: 
+
+```{python}
+# Get vector of predictions for the training set:
+yhat = knn.predict(X)    
+```
+
+Now we simply count up the number of correctly predicted labels and divide by the total number of samples to get the **accuracy** of the classifier.
+
+```{python}
+acc = sum(yhat == y) / n    # fraction of correct predictions
+print(f"accuracy is {acc:.1%}")
+```
+
+Not surprisingly, sklearn has functions for doing this measurement in fewer steps. The `metrics` module has functions that can compare true labels with predictions. In addition, each classifier object has a `score` method that allows you to skip finding the predictions vector yourself.
+
+```{python}
+from sklearn.metrics import accuracy_score
+
+# Compare original labels to predictions:
+acc = accuracy_score(y, yhat)    
+print(f"accuracy score is {acc:.1%}")
+
+# Same result, if we don't want to keep the predicted values around:
+acc = knn.score(X, y)    
+print(f"knn score is {acc:.1%}")
+```
+
+Does this mean that the classifier is a good one? The raw number looks great, but that question is more subtle than you would expect.
+
+## Classifier performance
+
+Let's return to the (previously cleaned) loan applications dataset.
+
+```{python}
+import pandas as pd
+loans = pd.read_csv("loan_clean.csv")
+loans.head()
+```
+
+We create a binary classification problem by labelling whether each loan was at least 95% funded. The other columns will form the features for the predictions.
+
+```{python}
+X = loans.drop("percent_funded", axis=1)
+y = loans["percent_funded"] > 95
+```
+
+:::{.callout-tip}
+Scikit-learn works as seamlessly with pandas data frames as it does with numerical arrays. In an application, it's often worthwhile to refer to quantities by memorable names, rather than relying on numerical indexes into a matrix.
+:::
+
+### Train–test paradigm
+
+It seems desirable for a classifier to work well on the samples it was trained on. But we probably want to do more than that. 
+
+:::{#def-class-generalization}
+The performance of a predictor on previously unseen data is known as the **generalization** of the predictor. 
+:::
+
+In order to gauge generalization, we hold back some of the labeled data from training and use it only to test the performance. An `sklearn` helper function called `train_test_split` allows us to split off 20% of the data to use for testing. It's usually recommended to shuffle the order of the samples before the split, and in order to make the results reproducible, we give a specific random seed to the RNG used for the shuffle.
+
+```{python}
+from sklearn.model_selection import train_test_split
+
+X_tr, X_te, y_tr, y_te = train_test_split(X, y,
+  test_size=0.2,
+  shuffle=True,
+  random_state=3
+)
+
+print("There are", X_tr.shape[0], "training samples.")
+print("There are", X_te.shape[0], "testing samples.")
+```
+
+We can check that the test and train labels have similar characteristics:
+
+```{python}
+import pandas as pd
+print("labels in the training set:")
+print( pd.Series(y_tr).describe() )
+
+print("\nlabels in the testing set:")
+print( pd.Series(y_te).describe() )
+```
+
+Now we train on the training data...
+
+```{python}
+knn = KNeighborsClassifier(n_neighbors=9)
+knn.fit(X_tr, y_tr)    # fit only to train set
+```
+
+...and test on the rest.
+
+```{python}
+acc = knn.score(X_te, y_te)    # score only on test set
+print(f"test accuracy is {acc:.1%}")
+```
+
+This seems like a high accuracy, perhaps. But consider that the vast majority of loans were funded:
+
+```{python}
+funded = sum(y)
+print(f"{funded/len(y):.1%} were funded")
+```
+
+Therefore, an algorithm that simply "predicts" funding every single loan could do as well as the trained classifier! 
+
+```{python}
+from sklearn import metrics
+generous = [True]*len(y_te)
+acc = metrics.accuracy_score(y_te, generous)
+print(f"fund-them-all accuracy is {acc:.1%}")
+```
+
+In this context, our trained classifier is not impressive at all. We need a metric other than accuracy.
+
+### Binary classifiers
+
+A binary classifier is one that produces just two unique labels, which we call "yes" and "no" here. To fully understand the performance of a binary classifier, we have to account for four cases:
+
+* True positives (TP): Predicts "yes", actually is "yes"
+* False positives (FP): Predicts "yes", actually is "no"
+* True negatives (TN): Predicts "no", actually is "no"
+* False negatives (FN): Predicts "no", actually is "yes"
+
+The four cases correspond to a 2×2 table according to the states of the prediction and *ground truth*, which is the accepted correct value (i.e., the given label). The table can be filled with counts or percentages of tested instances, to create a **confusion matrix**, as illustrated in @fig-class-confusion. 
+
+![Confusion matrix](confusion.svg){fig-alt="A binary confusion matrix." #fig-class-confusion}
+
+`sklearn` makes it straightforward to compute a confusion matrix:
+
+```{python}
+yhat = knn.predict(X_te)
+C = metrics.confusion_matrix(y_te, yhat, labels=[True,False])
+lbl = ["fund", "reject"]
+metrics.ConfusionMatrixDisplay(C, display_labels=lbl).plot();
+```
+
+:::{.callout-caution}
+It's advisable to call `confusion_matrix` with the `labels` argument, even though it is optional, in order to have control over the ordering within the matrix. In particular, `False` < `True`, so the default is to count the upper left corner of the matrix as "true negatives," assuming that `False` represents a negative result.
+:::
+
+Hence, there are 7570 true positives. Therefore, the **accuracy** is 
+
+$$
+\text{accuracy} = \frac{\TP + \TN}{\TP + \FP + \TN + \FN} = \frac{7570}{7944} \approx 0.95292
+$$
+
+i.e., 95.3%. However, there are four other useful quantities defined by putting a "number correct" value in the numerator and the sum of a confusion matrix row or column in the denominator:
+
+$$
+\begin{split}
+\text{recall (aka sensitivity)} &= \frac{\TP}{\TP + \FN} \\[2mm]
+\text{specificity} &= \frac{\TN}{\TN + \FP} \\[2mm] 
+\text{precision} &= \frac{\TP}{\TP + \FP} \\[2mm] 
+\text{negative predictive value (NPV)} &= \frac{\TN}{\TN + \FN} 
+\end{split}
+$$
+
+In words, these metrics answer the following questions:
+
+* **recall** How often are actual "yes" cases predicted correctly?
+* **specificity** How often are actual "no" cases predicted correctly?
+* **precision** How often are the "yes" predictions correct?
+* **NPV** How often are the "no" predictions correct?
+
+For our loan classifier, here are the scores:
+
+```{python}
+TP,FN,FP,TN = C.ravel()    # grab the 4 values in the confusion matrix
+print(f"recall = {TP/(TP+FN):.1%}")
+print(f"specificity = {TN/(TN+FP):.1%}")
+print(f"precision = {TP/(TP+FP):.1%}")
+print(f"NPV = {TN/(TN+FN):.1%}")
+```
+
+The high recall rate means that few who ought to get a loan will go away disappointed. However, the low specificity would be concerning to those providing the funds, because almost all of those who should be rejected will be approved by the classifier. 
+
+In `sklearn.metrics` there are functions to compute recall and precision without reference to the confusion matrix. You must put the ground-truth labels before the predicted labels, and you should also specify which of the labels corresponds to a "positive" result. Swapping the "positive" role effectively swaps recall with specificity, and precision with NPV.
+
+```{python}
+for pos in [True,False]:
+  print("With", pos, "as positive:")
+  s = metrics.recall_score(y_te, yhat, pos_label=pos)
+  print(f"    recall is {s:.3f}")
+  s = metrics.precision_score(y_te, yhat, pos_label=pos) 
+  print(f"    precision is {s:.3f}")
+  print()
+```
+
+There are several ways to combine the measures above into a single value. None is universally best, because different applications emphasize different aspects of performance. One of the most popular is the ***F*₁ score**, which is the harmonic mean of the precision and the recall:
+
+$$
+F_1 = \left[ \frac{1}{2} \left(\frac{\TP + \FN}{\TP} + \frac{\TP+\FP}{\TP} \right)  \right]^{-1} = \frac{2\TP}{2\TP+\FN+\FP}.
+$$
+
+This score varies between 0 (poor) and 1 (ideal). If one of the quantities is much smaller than the other, their harmonic mean will be close to the small value. Thus, *F*₁ score punishes a classifier if either recall or precision is poor. 
+
+Another composite score is **balanced accuracy**, which is the arithmetic mean of recall and specificity. It also ranges from 0 to 1, with 1 meaning perfect accuracy.
+
+```{python}
+print( "F1:", metrics.f1_score(y_te, yhat) )
+print( "Balanced:", metrics.balanced_accuracy_score(y_te, yhat) )
+```
+
+The loan classifier trained above has excellent recall, respectable precision, and terrible specificity, resulting in a good *F*₁ score and a low balanced accuracy score.
+
+:::{#exm-class-scores}
+If $k$ of the $n$ testing samples were funded loans, then the fund-them-all loan classifier has
+
+$$
+\TP = k,\, \TN = 0,\, \FP = n-k,\, \FN = 0.
+$$
+
+Its *F*₁ score is thus
+
+$$
+\frac{2\TP}{2\TP+\FN+\FP} = \frac{2k}{2k+n-k} = \frac{2k}{k+n}.
+$$
+
+If the fraction of funded samples in the test set is $k/n=a$, then the accuracy of this classifier is $a$. Its *F*₁ score is $2a/(1+a)$, which is larger than $a$ unless $a=1$. That's because the true positives greatly outweigh the other confusion matrix values. 
+
+The balanced accuracy is 
+
+$$
+\frac{1}{2} \left(\frac{\TP}{\TP+\FN} + \frac{\TN}{\TN+\FP} \right)  = \frac{1}{2},
+$$
+
+independently of $a$. This quantity is sensitive to the low specificity.
+:::
+
+### Multiclass classifiers
+
+When there are more than two unique possible labels, these metrics can be applied using the **one-vs-rest** paradigm. For $K$ unique labels, this paradigm poses $K$ binary questions: "Is it in class 1, or not?", "Is it in class 2, or not?", etc. The confusion matrix becomes $K\times K$. 
+
+It's easiest to see how this works by an example. We will load a dataset on the characteristics of cars and use quantitative factors to predict the region of origin. 
+
+```{python}
+import seaborn as sns
+cars = sns.load_dataset("mpg").dropna()
+cars.head()
+```
+```{python}
+features = ["cylinders", "horsepower", "weight", "acceleration", "mpg"]
+X = cars[features]
+y = pd.Categorical(cars["origin"])
+print(X.shape[0], "samples and", X.shape[1], "features")
+```
+
+```{python}
+X_tr, X_te, y_tr, y_te = train_test_split(
+  X, y, 
+  test_size=0.2, 
+  shuffle=True, 
+  random_state=1
+)
+knn = KNeighborsClassifier(n_neighbors=8)
+knn.fit(X_tr, y_tr)
+yhat = knn.predict(X_te)
+print(f"accuracy is {metrics.accuracy_score(y_te, yhat):.1%}")
+```
+
+```{python}
+labels = y.categories
+C = metrics.confusion_matrix(y_te, yhat, labels=labels)
+metrics.ConfusionMatrixDisplay(C, display_labels=labels).plot();
+```
+
+From the confusion matrix above we can see that, for example, out of 54 predictions of "usa" on the test set, there are 8 total false positives, in the sense that the actual labels were otherwise.
+
+We also get $K$ versions of the metrics like accuracy, recall, *F*₁ score, and so on. We can get all the individual precision scores, say, automatically:
+
+```{python}
+prec = metrics.precision_score(y_te, yhat, average=None)
+for (i,p) in enumerate(prec): 
+    print(f"{labels[i]}: {p:.1%}")
+```
+
+To get a composite precision score, we have to specify an averaging method. The `"macro"` option simply takes the mean of the vector above.
+
+```{python}
+mac = metrics.precision_score(y_te, yhat, average="macro")
+print(mac)
+```
+
+There are other ways to perform the averaging, depending on whether poorly represented classes should be weighted more weakly than others.
+
+## Decision trees
+
+A decision tree is much like playing "Twenty Questions." A question is asked, and the answer reduces the possible results, leading to a new question. **CART** (Classification And Regression Tree) is a popular method for systematizing the idea.
+
+Given feature vectors $\bfx_1,\ldots,\bfx_n$ with labels $y_1,\ldots,y_n$, the immediate goal is to partition the samples into subsets whose labels are as uniform as possible. The process is then repeated recursively on the subsets. Defining a measurement of label uniformity is a key step. 
+
+### Gini impurity
+
+Let $S$ be a subset of the samples, given as a list of indices into the original set. Suppose there are $K$ unique labels, which we denote $1,2,\ldots,K$. Define
+
+$$
+p_k = \frac{1}{ |S| } \sum_{i\in S} \mathbb{1}_k(y_i),
+$$
+
+where $|S|$ is the number of elements in $S$ and $\mathbb{1}_k$ is the **indicator function**
+
+$$
+\mathbb{1}_k(t) = \begin{cases} 
+  1, & \text{if } t=k, \\ 
+  0, & \text{otherwise.}
+  \end{cases}
+$$
+
+In words, $p_k$ is the proportion of samples in $S$ that have label $k$. Then the **Gini impurity** is defined as 
+
+$$
+H(S) = \sum_{k=1}^K p_k(1-p_k).
+$$
+
+If one of the $p_k$ is 1, then the others are all zero and $H(S)=0$. This is considered optimal. At the other extreme, if $p_k=1/K$ for all $k$, then 
+
+$$
+H(S) = \sum_{k=1}^K \frac{1}{K} \left(1 - \frac{1}{K} \right) = K\cdot \frac{1}{K}\cdot\frac{K-1}{K} = \frac{K-1}{K} < 1.
+$$
+
+::::{#exm-class-gini}
+Suppose a set $S$ has $n$ members with label 1, 1 member with label 2, and 1 member with label 3. What is the Gini impurity of $S$?
+
+::: {.solution}
+We have $p_1=n/(n+2)$, $p_2=p_3=1/(n+2)$. Hence
+
+$$
+\begin{split}
+	H(S) &= \frac{n}{n+2}\left( 1 - \frac{n}{n+2} \right) + 2 \frac{1}{n+2}\left( 1 - \frac{1}{n+2} \right) \\ 
+	&= \frac{n}{n+2}\frac{2}{n+2} + \frac{2}{n+2}\frac{n+1}{n+2} \\ 
+	&= \frac{4n+2}{(n+2)^2}.
+\end{split}
+$$
+
+This value is 1/2 for $n=0$ and approaches zero as $n\to\infty$.
+:::
+::::
+
+### Partitioning
+
+Now we can describe the partition process. If $j$ is a dimension (feature) number and $\theta$ is a numerical threshold, then the sample set can be partitioned into complementary sets $S_L$, in which $x_j \le \theta$, and $S_R$, in which $x_j > \theta$. Define the **total impurity** of the partition to be 
+
+$$
+Q(j,\theta) = \lvert S\rvert\, H(S) + \lvert T \rvert \, H(T).
+$$
+
+Choose the $(j,\theta)$ that minimize $Q$, and then recursively partition $S$ and $T$.
+
+::::{#exm-class-tree-partition}
+
+Suppose the 1D real samples $x_i=i$ for $i=0,1,2,3$ have labels A,B,A,B. What is the optimal partition?
+
+::: {.solution}
+There are three ways to partition them.
+
+* $S=\{0\}$, $T=\{1,2,3\}$. We have $H(S)=0$ and $H(T)=(2/3)(1/3)+(1/3)(2/3)=4/9$. Hence the total impurity for this partition is $(1)(0) + (3)(4/9) = 4/3$.
+* $S=\{0,1\}$, $T=\{2,3\}$. Then $H(S)=H(T)=2(1/2)(1/2)=1/2$, and the total impurity is $(2)(1/2)+(2)(1/2)=2$. 
+* $S=\{0,1,2\}$, $T=\{3\}$. This arrangement is the same as the first case with $A↔B$.
+
+The best partition threshold is $x\le 0$ (or $x\le 2$, which is equivalent).
+:::
+::::
+
+### Toy example
+
+We first create a toy dataset with 20 random points, with two subsets of 10 that are shifted left/right a bit.
+
+```{python}
+#| code-fold: true
+import numpy as np
+import pandas as pd
+from numpy.random import default_rng
+
+rng = default_rng(1)
+x1 = rng.random((10,2))
+x1[:,0] -= 0.25
+x2 = rng.random((10,2))
+x2[:,0] += 0.25
+X = np.vstack((x1,x2))
+y = np.hstack(([1]*10,[2]*10))
+
+import seaborn as sns
+df = pd.DataFrame( {"x₁":X[:,0], "x₂":X[:,1], "y":y} )
+sns.scatterplot(data=df, x="x₁", y="x₂", hue="y");
+```
+
+Now we create a decision tree for these samples.
+
+```{python}
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+t = DecisionTreeClassifier(max_depth=3)
+t.fit(X,y)
+
+from matplotlib.pyplot import figure
+figure(figsize=(18,11), dpi=160)
+plot_tree(t, feature_names=["x₁", "x₂"]);
+```
+
+The root of the tree (at the top) shows that the best split was found at the vertical line $x_1=0.644$. To the right of that line is a Gini value of zero: 8 samples, all with label 2. Thus, any future prediction by this tree will immediately return label 2 if the first feature of the input exceeds 0.644. Otherwise, it moves to the left child node and tests whether the second feature is greater than $0.96$. This splits along a horizontal line, above which there is a single sample with label 2. And so on.
+
+Notice that the bottom right node has a nonzero Gini impurity. This node could be partitioned, but the classifier was constrained to stop at a depth of 3. If a prediction ends up here, then the classifier returns label 1, which is the most likely outcome.
+
+Because we can follow the decision tree's logic step by step, we say it is highly **interpretable**. The transparency of the prediction algorithm is an attractive aspect of decision trees, although this advantage can weaken as the numbers of features and observations increase.
+
+### Penguin data
+
+We return to the penguins. There is no need to standardize the columns for a decision tree, because each feature is considered on its own.
+
+```{python}
+import pandas as pd
+pen = sns.load_dataset("penguins")
+pen = pen.dropna()
+features = [
+  "bill_length_mm",
+  "bill_depth_mm",
+  "flipper_length_mm",
+  "body_mass_g"
+]
+X = pen[features]
+y = pen["species"]
+```
+
+We get some interesting information from looking at the top levels of a decision tree trained on the full dataset.
+
+```{python}
+dt = DecisionTreeClassifier(max_depth=4)
+dt.fit(X, y)
+
+from matplotlib.pyplot import figure
+figure(figsize=(18,11), dpi=160)
+plot_tree(dt, max_depth=2, feature_names=features);
+```
+
+The most determinative feature for identifying the species is the flipper length. If it exceeds 206.5 mm, then the penguin is rather likely to be a Gentoo. 
+
+We can measure the relative importance of each feature by comparing their total contributions to reducing the Gini index. This is known as **Gini importance**.  
+
+```{python}
+pd.Series(dt.feature_importances_, index=features)
+```
+
+Flipper length alone accounts for about half of the resolving power of the tree, followed in importance by the bill length. The other measurements apparently have little discriminative value.
+
+In order to assess the effectiveness of the tree, we use the train–test paradigm.
+
+```{python}
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix,classification_report
+
+X_tr, X_te, y_tr, y_te = train_test_split(
+  X, y,
+  test_size=0.2,
+  shuffle=True,
+  random_state=0
+)
+dt.fit(X_tr, y_tr)
+
+yhat = dt.predict(X_te)
+print( confusion_matrix(y_te, yhat) )
+print( classification_report(y_te, yhat) )
+```
+
+The performance is quite good, although the Chinstrap case is hindered by the relatively low number of training examples:
+
+```{python}
+y_tr.value_counts()
+```
+
+### Limitations
+
+Decision trees depend sensitively on the sample locations. A tree trained on one data subset may not do well on a new set. A small change can completely rewrite large parts of the tree, which gives a caveat about interpretation. Also, the partition algorithm, which is *greedy* by doing the best thing at the moment, does not necessarily find a globally optimal tree, or even a nearby one. 
+
+
+## Nearest neighbors
+
+Our first learning algorithm is conceptually simple: Given a new point to classify, survey the nearest known examples and choose the most frequently occurring class. This is called the **$k$ nearest neighbors** (KNN) algorithm, where $k$ is the number of neighboring examples to survey.
+
+### Norms
+
+The existence of "closest" examples means that we need to define a notion of distance in spaces of any dimension. Let $\real^d$ be the space of vectors with $d$ real components, and let $\bfzero$ be the vector of all zeros.
+
+:::{#def-class-norm}
+A **norm** is a function $\norm{\bfx}$ on $\real^d$ that satisfies the following properties:
+
+$$
+\begin{split}
+\norm{\bfzero} &= 0,  \\ 
+\norm{\bfx} &> 0 \text{ if $\bfx$ is a nonzero vector}, \\ 
+\norm{c\bfx} &= |c| \, \norm{x} \text{ for any real number $c$}, \\ 
+\norm{\bfx + \bfy } &\le \norm{\bfx} + \norm{\bfy} 
+\end{split}
+$$
+:::
+
+The last inequality above is called the **triangle inequality**. It turns out that these four characteristics are all we expect from a function that behaves like a distance. 
+
+On the number line (i.e., $\real^1$), the distance between two values is just the absolute value of their difference, $\abs{x-y}$. In $\real^d$, the distance between two vectors is the norm of their difference, $\norm{ \bfx - \bfy }$. 
+
+There are three commonly used norms:
+
+* The **2-norm** or Euclidean norm:
+$$
+\twonorm{\bfx} = \bigl(x_1^2 + x_2^2 + \cdots + x_d^2\bigr)^{1/2}.
+$$
+* The **1-norm** or Manhattan norm: 
+$$
+\onenorm{\bfx} = |x_1| + |x_2| + \cdots + |x_d|.
+$$
+* The **$\infty$-norm** or max norm:
+$$\infnorm{\bfx} = \max_i \abs{x_i}.$$
+
+
+The Euclidean norm generalizes ordinary geometric distance in $\real^2$ and $\real^3$ and is usually considered the default. One of its most important features is that $\twonorm{\bfx}^2$ is a differentiable function of the components of $\bfx%. 
+
+:::{.callout-note}
+When $\norm{\,}$ is used with no subscript, it's usually meant to be the 2-norm, but sometimes it means a generic, unspecified norm.
+:::
+
+### Algorithm
+
+As data, we are given labeled examples $\bfx_1,\ldots,\bfx_n$ in $\real^d$. Given a new query vector $\bfx$, find the $k$ labeled vectors closest to $\bfx$ and choose the most frequently occurring label among them. Ties can be broken randomly.
+
+KNN divides up the feature space into domains that are dominated by nearby instances. The boundaries between those domains, called **decision boundaries**, can be fairly complicated, though, as shown in the animation below. 
+
+{{< video _media/knn_demo.mp4 >}}
+
+Implementation of KNN is straightforward for small data sets, but requires care to get reasonable execution efficiency for large sets.
+
+### KNN in sklearn
+
+Let's revisit the penguins. We use `dropna` to drop any rows with missing values.
+```{python}
+import seaborn as sns
+import pandas as pd
+penguins = sns.load_dataset("penguins")
+penguins = penguins.dropna()
+penguins
+```
+
+The data set has four quantitative columns that we use as features, and the species name is the label. 
+
+```{python}
+features = [
+  "bill_length_mm",
+  "bill_depth_mm",
+  "flipper_length_mm",
+  "body_mass_g"
+]
+X = penguins[features]
+y = penguins["species"]
+```
+
+Each type of classifier has to be imported before its first use in a session. (Importing more than once does no harm.)
+
+```{python}
+from sklearn.neighbors import KNeighborsClassifier
+knn = KNeighborsClassifier(n_neighbors=5)
+knn.fit(X, y)
+```
+
+We can manually find the neighbors of a new vector. However, we have to make the query in the form of a data frame, since that is how the training data was provided. Here we make a query frame for values very close to the ones in the first row of the data.
+
+```{python}
+vals = [39, 19, 180, 3750]
+query = pd.DataFrame([vals], columns=features)
+dist, idx = knn.kneighbors(query)
+idx[0]
+```
+
+The result above indicates that the first sample (index 0) was the closest, followed by four others. We can look up the labels of these points:
+
+```{python}
+y[ idx[0] ]
+```
+
+By a vote of 4–1, then, the classifier should choose Adelie as the result at this location.
+
+```{python}
+knn.predict(query)
+```
+
+Note that points can be outvoted by their neighbors. In other words, the classifier won't necessarily be correct on every training sample. For example:
+
+```{python}
+print("Predicted:")
+print( knn.predict(X.iloc[:5,:]) )
+print()
+print("Data:")
+print( y.iloc[:5].values )
+```
+
+Next, we split into training and test sets to gauge the performance of the classifier. The `classification_report` function creates a summary of some of the important metrics.
+
+```{python}
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report,confusion_matrix
+
+X_tr, X_te, y_tr, y_te = train_test_split(X,y,test_size=0.2)
+knn.fit(X_tr,y_tr)
+
+yhat = knn.predict(X_te)
+print(confusion_matrix(y_te,yhat))
+print(classification_report(y_te,yhat))
+```
+
+The default norm in the KNN learner is the 2-norm. To use the 1-norm instead, add `metric="manhattan"` to the classifier construction call.
+
+### Standardization
+
+The values in the columns of the penguin frame are scaled quite differently. In particular, the values in the body mass column are more than 20x larger than the other columns on average:
+
+```{python}
+X.mean()
+```
+
+Consequently, the mass feature will dominate the distance calculations. To remedy this issue, we can transform the data into z-scores:
+
+```{python}
+Z = X.transform( lambda x: (x - x.mean()) / x.std() )
+```
+
+In this instance, standardization makes performance dramatically better:
+
+```{python}
+Z_tr, Z_te, y_tr, y_te = train_test_split(Z,y,test_size=0.2)
+knn.fit(Z_tr,y_tr)
+
+yhat = knn.predict(Z_te)
+print(confusion_matrix(y_te,yhat))
+print(classification_report(y_te,yhat))
+```
+
+### Pipelines
+
+One nuisance of the standardization step above is that it must be performed again for any new query vector that comes along. This means we need to keep track of the mean and std of the original training set. 
+
+Scikit-learn allows us to create a **pipeline** that automates the transformation. Pipelines make it easy to chain together data transformations followed by a learner. The composite object acts much like a regular learner.
+
+As you might guess, standardization of data is so common that it is predefined:
+
+```{python}
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler   # converts to z-scores
+
+X_tr, X_te, y_tr, y_te = train_test_split(
+  X, y, 
+  test_size=0.2,
+  shuffle=True,
+  random_state=0
+)
+
+knn = KNeighborsClassifier(n_neighbors=5)
+pipe = make_pipeline(StandardScaler(), knn)
+
+pipe.fit(X_tr, y_tr)
+pipe.score(X_te, y_te)
+```
+
+We can look under the hood of the pipeline. For example, we can see that the mean and variance of each of the original data columns is stored in the first part of the pipeline:
+
+```{python}
+print( pipe[0].mean_ )
+print( pipe[0].var_ )
+```
+
+## Quantifying votes {#sec-class-quant}
+
+Both kNN and decision trees base classification on a voting procedure---for kNN, the $k$ nearest neighbors cast votes, and for a decision tree, the values at a leaf cast votes. So far, we have interpreted the voting results in a winner-takes-all sense, i.e., the class with the most votes wins. But that interpretation discards a lot of potentially valuable information. 
+
+::::{#def-class-phat}
+Let $\bfx$ be a query vector in a vote-based classification method. The **probability vector** $\hat{p}(\bfx)$ is the vector of vote fraction received by each class.
+::::
+
+::::{#exm-class-phat}
+Suppose we have trained a kNN classifier with $k=10$ for data with three classes, called A, B, and C, and that the votes at the testing points are as follows:
+```{python}
+#| echo: false
+import pandas as pd
+pd.DataFrame({"A":[9,5,6,2,4],"B":[0,3,1,0,5],"C":[1,2,3,8,1]})
+```
+The values of $\hat{p}$ over the test set form a $5\times 3$ matrix:
+<!-- $$
+[0.9,0,0.1],\,[0.3,0.3,0.4],\,[0.6,0.1,0.3],\,[0.2,0,0.8],\,[0.4,0.5,0.1]. 
+$$ -->
+```{python}
+p_hat = np.array( [
+    [0.9, 0, 0.1],
+    [0.5, 0.3, 0.2],
+    [0.6, 0.1, 0.3],
+    [0.2, 0, 0.8],
+    [0.4, 0.5, 0.1]
+    ] )
+```
+::::
+
+It's natural to interpret $\hat{p}$ as predicting the probability of each label at any query point, since the values are nonnegative and sum to 100%. Given $\hat{p}$, we can still output a predicted class; it's just that the information we get is upstream in the process.
+
+::::{#exm-class-prob}
+Consider the penguin species classification problem:
+
+```{python}
+penguins = sns.load_dataset("penguins").dropna()
+# Select only numeric columns for features:
+X = penguins.loc[:, penguins.dtypes=="float64"]  
+y = penguins["species"].astype("category")
+
+X_tr, X_te, y_tr, y_te = train_test_split(
+    X, y,
+    test_size=0.2, 
+    shuffle=True, random_state=5
+    )
+```
+
+We can train a kNN classifier and then retrieve the probabilities via `predict_proba`:
+
+```{python}
+knn = KNeighborsClassifier(n_neighbors=5)
+knn.fit(X_tr, y_tr)
+p_hat = knn.predict_proba(X_te)
+p_hat[:6,:]
+```
+
+From the output above we see that, for example, while the third and fourth test cases led to unanimous votes for *Gentoo*, the sixth case is deemed *Adelie* in a 3--2 squeaker (or is it a squawker?):
+
+```{python}
+yhat = knn.predict(X_te)
+yhat[:6]
+```
+::::
+
+### ROC curve
+
+Having values between the classes means that we can fine-tune how we decide to assign them. 
+
+::::{#def-class-hits}
+Let $\theta$ be a number in the interval $[0,1]$. We say that a class $T$ **hits** at level $\theta$ at a query point if the fraction of votes that $T$ receives at that point is at least $\theta$. 
+::::
+
+::::{#exm-class-hits}
+Continuing with the data in @exm-class-phat, we find that at $\theta=0$, everything always hits:
+```{python}
+#| echo: false
+pd.DataFrame({"A":[1,1,1,1,1],"B":[1,1,1,1,1],"C":[1,1,1,1,1]})
+```
+At $\theta=0.05$, say, we lose all the cases where no votes were received:
+```{python}
+#| echo: false
+pd.DataFrame({"A":[1,1,1,1,1],"B":[0,1,1,0,1],"C":[1,1,1,1,1]})
+```
+At $\theta=0.15$, we have also lost all those receiving 1 out of 10 votes:
+```{python}
+#| echo: false
+pd.DataFrame({"A":[1,1,1,1,1],"B":[0,1,0,0,1],"C":[0,1,1,1,0]})
+```
+By the time we get to $\theta=0.7$, there are only two hits left:
+```{python}
+#| echo: false
+pd.DataFrame({"A":[1,0,0,0,0],"B":[0,0,0,0,0],"C":[0,0,0,1,0]})
+```
+::::
+
+The probability vector $\hat{p}(\bfx)$ holds the largest possible $\theta$ values for which each class hits at $\bfx$. Looking at it another way, $\theta=0$ represents maximum credulity---everybody's a winner!---while $\theta=1$ represents maximum skepticism---unanimous winners only.
+
+The **ROC curve**, or *receiver operator characteristic* curve, is a way to visualize the hits as a function of $\theta$ over a fixed testing set. The name is a little misleading, since the multiclass case requires multiple curves. The idea is to tally, at each value of $\theta$, all the hits within each class that represent true positives and false positives. 
+
+::: {.callout-note}
+The name of the ROC curve is a throwback to the early days of radar, when the idea was first developed.
+:::
+
+::::{#exm-class-roc-simple}
+We continue with the data from @exm-class-phat, but now we add ground truth to the queries:
+
+```{python}
+#| echo: false
+pd.DataFrame({"A":[9,5,6,2,4],"B":[0,3,1,0,5],"C":[1,2,3,8,1],"truth":["A","B","A","C","A"]})
+```
+
+Let's look at class A. At $\theta=0.05$, class A hits in every case, giving TP=3 and FP=2. At $\theta=0.25$, the fourth query drops out; we still have TP=3, but now FP=1. Here is the table of all the unique values of TP and FP that we can achieve as $\theta$ varies between 0 and 1:
+
+```{python}
+#| echo: false
+pd.DataFrame({"theta":[0.05,0.25,0.45,0.55,0.65,0.95],"FP":[2,1,1,0,0,0],"TP":[3,3,2,2,1,0]})
+```
+
+In order to make a graph, we convert the raw TP and FP numbers to rates. Since there are 2 positive and 3 negative over the entire test set, we can represent the rows above as the points
+$$
+\left(\tfrac{2}{2},\tfrac{3}{3}\right), \, \left(\tfrac{1}{2},\tfrac{3}{3}\right), \, \left(\tfrac{1}{2},\tfrac{2}{3}\right), \, \left(\tfrac{0}{2},\tfrac{2}{3}\right), \, \left(\tfrac{0}{2},\tfrac{1}{3}\right)\, \left(\tfrac{0}{2},\tfrac{0}{3}\right). 
+$$
+The ROC curve for class A is just connect-the-dots for these points:
+
+```{python}
+data = pd.DataFrame({"FP rate": [1,1/2,1/2,0,0,0], "TP rate": [1,1,2/3,2/3,1/3,0]})
+sns.relplot(data=data, 
+    x="FP rate", y="TP rate", 
+    kind="line", estimator=None
+    );
+```
+::::
+
+Unsurprisingly, `sklearn` can compute the points defining the ROC curve automatically, which greatly simplifies drawing them.
+
+::::{#exm-class-roc-penguin}
+Continuing @exm-class-prob, we will plot ROC curves for the three species in the penguin data:
+```{python}
+from sklearn.metrics import roc_curve
+
+p_hat = knn.predict_proba(X_te)
+results = []
+for i, label in enumerate(knn.classes_):
+    actual = (y_te==label)
+    fp, tp, theta = roc_curve(actual,p_hat[:,i])
+    results.extend( [(label,fp,tp) for fp,tp in zip(fp,tp)] )
+roc = pd.DataFrame( results, columns=["label","FP rate","TP rate"] )
+roc
+```
+
+The table above holds all of the key points on the ROC curves:
+
+```{python}
+sns.relplot(data=roc, 
+    x="FP rate", y="TP rate", 
+    hue="label", kind="line", estimator=None
+    );
+```
+
+Each curve starts in the lower left corner and ends at the upper right corner. The ideal situation is in the top left corner of the plot, corresponding to perfect recall and specificity. All of the curves explicitly show the tradeoff between recall and specificity as the decision threshold is varied. The *Gentoo* curve comes closest to the ideal. 
+
+If we weight neighbors' votes inversely to their distances from the query point, then the thresholds aren't restricted to multiples of $\tfrac{1}{5}$:
+
+```{python}
+knnw = KNeighborsClassifier(n_neighbors=5, weights="distance")
+knnw.fit(X_tr, y_tr)
+p_hat = knnw.predict_proba(X_te)
+
+results = []
+for i, label in enumerate(knn.classes_):
+    actual = (y_te==label)
+    fp, tp, theta = roc_curve(actual,p_hat[:,i])
+    results.extend( [(label,fp,tp) for fp,tp in zip(fp,tp)] )
+roc = pd.DataFrame( results, columns=["label","FP rate","TP rate"] )
+sns.relplot(data=roc, 
+    x="FP rate", y="TP rate", 
+    hue="label", kind="line", estimator=None
+    );
+```
+::::
+
+### AUC
+
+ROC curves lead to another classification performance metric known as **area under ROC curve (AUC)**. Its name tells you exactly what it is, and it ranges between 0 (bad) and 1 (ideal). Unlike the other classification metrics we have encountered, AUC tries to account not just for the result of the classification at a single threshold, but over the full range from credulous to skeptical. You might think of it as grading with partial credit.
+
+::::{#exm-class-auc}
+The AUC metric allows us to compare the standard and weighted kNN classifiers from @exm-class-roc-penguin. Note that the function for computing them, `roc_auc_score`, requires a keyword argument when there are more than two classes, to specify "one vs. rest" (our usual) or "one vs. one" matchups.
+
+```{python}
+from sklearn.metrics import roc_auc_score
+s = roc_auc_score(
+    y_te, knn.predict_proba(X_te), 
+    multi_class="ovr", average=None
+    )
+
+sw = roc_auc_score(
+  y_te, knnw.predict_proba(X_te), 
+  multi_class="ovr", average=None
+  )
+
+pd.DataFrame(
+    {"standard": s, "weighted": sw},
+    index=knn.classes_
+    )
+```
+
+Based on the above scores, the weighted classifier seems to be better at identifying all three species.
+::::
+
+## Exercises {.unnumbered}
+
+For these exercises, you may use computer help to work on a problem, but your answer should be self-contained without reference to computer output (unless stated otherwise).
+
+::::{#exr-class-dankness}
+Here is a confusion matrix for a classifier of meme dankness. 
+
+![](_media/dankness.png)
+
+Calculate the **(a)** recall, **(b)** precision, **(c)** specificity, **(d)** accuracy, and **(e)** $F_1$ score of the classifier, where *dank* is the positive outcome.
+::::
+
+::::{#exr-class-flavors}
+Here is a confusion matrix for a classifier of ice cream flavors. 
+
+![](_media/flavors.png)
+
+**(a)** Calculate the recall rate for chocolate.
+
+**(b)** Find the precision for vanilla. 
+
+**(c)** Find the accuracy for strawberry.
+::::
+
+::::{#exr-class-gini}
+Find the Gini impurity of this set: 
+$$ \{ A, B, B, C, C, C \}.$$
+::::
+
+::::{#exr-class-partition}
+Given $x_i=i$ for $i=0,\ldots,5$, with labels
+$$
+y_1=y_5=y_6=A, \quad y_2=y_3=y_4=B,
+$$
+find an optimal partition threshold using Gini impurity.
+::::
+
+::::{#exr-class-manhattan}
+Carefully sketch the set of all points in $\real^2$ whose 1-norm distance from the origin equals 1. This is a *Manhattan unit circle*.
+::::
+
+::::{#exr-class-triangle}
+Three points in the plane lie at the vertices of an equilateral triangle. One is labeled A and the other two are B. Carefully sketch the decision boundary of $k$-nearest neighbors with $k=1$, using the 2-norm. 
+::::
+
+::::{#exr-class-ellipse}
+Define points on an ellipse by $x_k=a\cos(\theta_k)$ and $y_k=b\sin(\theta_k)$, where $a$ and $b$ are positive and $\theta_k=2k\pi/8$ for $k=0,1,\ldots,7$. Show that if the $x_k$ and $y_k$ are standardized into z-scores, then the resulting points all lie on a circle centered at the origin. (Standardizing points into z-scores is sometimes called *sphereing* them.)
+::::

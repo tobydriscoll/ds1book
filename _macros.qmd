@@ -1,0 +1,49 @@
+::: {.hidden}
+$$
+    \newcommand{\float}{\mathbb{F}}
+    \newcommand{\real}{\mathbb{R}}
+    \newcommand{\complex}{\mathbb{C}}
+    \newcommand{\nat}{\mathbb{N}}
+    \newcommand{\integer}{\mathbb{Z}}
+    \newcommand{\bfa}{\mathbf{a}}
+    \newcommand{\bfe}{\mathbf{e}}
+    \newcommand{\bfh}{\mathbf{h}}
+    \newcommand{\bfp}{\mathbf{p}}
+    \newcommand{\bfq}{\mathbf{q}}
+    \newcommand{\bfu}{\mathbf{u}}
+    \newcommand{\bfv}{\mathbf{v}}
+    \newcommand{\bfw}{\mathbf{w}}
+    \newcommand{\bfx}{\mathbf{x}}
+    \newcommand{\bfy}{\mathbf{y}}
+    \newcommand{\bfz}{\mathbf{z}}
+    \newcommand{\bfA}{\mathbf{A}}
+    \newcommand{\bfW}{\mathbf{W}}
+    \newcommand{\bfX}{\mathbf{X}}
+    \newcommand{\bfzero}{\boldsymbol{0}}
+    \newcommand{\bfmu}{\boldsymbol{\mu}}
+    \newcommand{\TP}{\text{TP}}
+    \newcommand{\TN}{\text{TN}}
+    \newcommand{\FP}{\text{FP}}
+    \newcommand{\FN}{\text{FN}}
+    \newcommand{\rmn}[2]{\mathbb{R}^{#1 \times #2}}
+    \newcommand{\dd}[2]{\frac{d #1}{d #2}}
+    \newcommand{\pp}[2]{\frac{\partial #1}{\partial #2}}
+    \newcommand{\norm}[1]{\left\lVert \mathstrut #1 \right\rVert}
+    \newcommand{\abs}[1]{\left\lvert \mathstrut #1 \right\rvert}
+    \newcommand{\twonorm}[1]{\norm{#1}_2}
+    \newcommand{\onenorm}[1]{\norm{#1}_1}
+    \newcommand{\infnorm}[1]{\norm{#1}_\infty}
+    \newcommand{\innerprod}[2]{\langle #1,#2 \rangle}
+    \newcommand{\pr}[1]{^{(#1)}}
+    \newcommand{\diag}{\operatorname{diag}}
+    \newcommand{\sign}{\operatorname{sign}}
+    \newcommand{\dist}{\operatorname{dist}}
+    \newcommand{\simil}{\operatorname{sim}}
+    \newcommand{\ee}{\times 10^}
+    \newcommand{\floor}[1]{\lfloor#1\rfloor}
+    \newcommand{\argmin}{\operatorname{argmin}}
+    \newcommand{\E}[1]{\operatorname{\mathbb{E}}\left[\mathstrut #1\right]}
+    \newcommand{\Cov}{\operatorname{Cov}}
+    \newcommand{\logit}{\operatorname{logit}}
+$$
+:::

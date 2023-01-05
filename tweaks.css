@@ -1,0 +1,25 @@
+.theorem.example {
+    /* border-left: none; */
+    /* border-right: none; */
+    /* border-top: 3px solid #dee2e6; */
+    border: 3px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding-left: 1ex;
+    padding-right: 1ex;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.theorem.example p,.theorem.example ol,.theorem.example ul {
+    /* background-color: rgb(250, 249, 240); */
+    font-size: 92%;
+}
+
+.theorem.example .theorem-title {
+    display: block;
+    margin-bottom: 1ex;
+}
+
+.cell-output-stdout {
+    background-color: rgb(248,244,251);
+}

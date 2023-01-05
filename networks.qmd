@@ -1,0 +1,1407 @@
+# Networks
+{{< include _macros.qmd >}}
+
+```{python}
+#| code-fold: true
+import numpy as np
+from numpy.random import default_rng
+import pandas as pd
+import seaborn as sns
+from numpy.random import default_rng
+```
+
+Many phenomena have a natural network structure. Obvious examples are social networks, transportation networks, and the Web, but other examples include cellular protein interactions, scientific citations, ecological predation, and many others.
+
+## Graphs
+
+In mathematics, a network is represented as a **graph**. A graph is a collection of **nodes** (also called *vertices*) and **edges** that connect pairs of nodes. A basic distinction in graph theory is between an **undirected graph**, in which the edge $(a,b)$ is identical to $(b,a)$, and a **directed graph** or **digraph**, in which $(a,b)$ and $(b,a)$ are different potential edges. In either type of graph, each edge might be labeled with a numerical value, which results in a **weighted graph**.
+
+Undirected, unweighted graphs will give us plenty to handle, and we will not seek to go beyond them. We also will not consider graphs that allow a node to link to itself.
+
+### NetworkX
+
+We will use the NetworkX package to work with graphs.
+
+```{python}
+import networkx as nx
+```
+
+One way to create a graph is from a list of edges.
+
+```{python}
+star = nx.Graph( [ (1,2),(1,3),(1,4),(1,5),(1,6) ] )
+nx.draw(star, with_labels=True, node_color="lightblue")
+```
+
+Another way to create a graph is to give the start and end nodes of the edges as columns in a data frame.
+
+```{python}
+network = pd.DataFrame( {'from': [1,2,3,4,5,6], 'to': [2,3,4,5,6,1]} )
+print(network)
+H = nx.from_pandas_edgelist(network, 'from', 'to')
+nx.draw(H, with_labels=True, node_color="lightblue")
+```
+
+We can conversely deconstruct a graph object into its nodes and edges. The results have special types that may need to be converted into sets, lists, or other objects.
+
+```{python}
+print("Nodes as a list:")
+print( list(star.nodes) )
+print("\nNodes as an Index:")
+print( pd.Index(star.nodes) )
+```
+
+It's also easy to find out which nodes are **adjacent** to a given node, i.e., connected to it by an edge. The result is that node's list of **neighbors**.
+
+```{python}
+print( "Neighbors of node 3 in graph H:", list(H[3]) )
+```
+
+### Common graph types
+
+There are functions that generate different well-studied types of graphs. The first graph constructed above is a **star graph**, and the graph `H` above is a **cycle graph**.
+
+```{python}
+nx.draw(nx.cycle_graph(9))
+```
+
+A cross between the star and the cycle is a **wheel graph**.
+
+```{python}
+nx.draw(nx.wheel_graph(9))
+```
+
+A **complete graph** is one that has every possible edge.
+
+```{python}
+K5 = nx.complete_graph(5)
+print("5 nodes,", nx.number_of_edges(K5), "edges")
+nx.draw(K5)
+```
+
+In a graph on $n$ nodes, there are 
+
+$$
+\binom{n}{2} = \frac{n!}{(n-2)!2!} = \frac{n(n-1)}{2}
+$$
+
+unique pairs of distinct nodes. Hence, there are $\binom{n}{2}$ edges in the undirected complete graph on $n$ nodes.
+
+A **lattice graph** has a regular structure, like graph paper.
+
+```{python}
+lat = nx.grid_graph( (5,4) )
+print(lat.number_of_nodes(), "nodes,", lat.number_of_edges(), "edges")
+nx.draw(lat, node_size=100)
+```
+
+In an $m\times n$ lattice graph, there are $m-1$ edges in one direction repeated $n$ times, plus $n-1$ edges in the other direction, repeated $m$ times. Thus there are 
+
+$$
+(m-1)n + (n-1)m = 2mn-(m+n)
+$$
+
+edges altogether.
+
+There are different ways to draw a particular graph in the plane, as determined by the positions of the nodes. The default is to imagine that the edges are springs pulling on the nodes. But there are alternatives that may be useful at times.
+
+```{python}
+nx.draw_circular(lat)
+```
+
+As you can see, it's not easy to tell how similar two graphs are by comparing renderings of them.
+
+### Adjacency matrix
+
+Every graph can be associated with an **adjacency matrix**. Suppose the nodes are numbered from $0$ to $n-1$. The adjacency matrix is $n\times n$ and has a 1 at position $(i,j)$ if node $i$ and node $j$ are adjacent, and a 0 otherwise.
+
+```{python}
+A = nx.adjacency_matrix(star)
+A
+```
+
+The matrix `A` is not stored in the format we have been used to. In a large network we would expect most of its entries to be zero, so it makes more sense to store it as a *sparse matrix*, where we keep track of only the nonzero entries.
+
+```{python}
+print(A)
+```
+
+We can easily convert `A` to a standard array, if it is not too large to fit in memory.
+
+```{python}
+A.toarray()
+```
+
+In an undirected graph, we have $A_{ij}=A_{ji}$ everywhere, and we say that $A$ is *symmetric*.
+
+### Importing networks
+
+There are many ways to read graphs from (and write them to) files. For example, here is a friend network among Twitch users.
+
+```{python}
+twitch = nx.read_edgelist("musae_edges.csv", delimiter=',', nodetype=int)
+```
+
+The file just imported has a pair of nodes representing one edge on each line. The nodes can have any names at all; by default they are interpreted as strings, which we overrode above to get integer node labels.
+
+```{python}
+print("Twitch network has", 
+    twitch.number_of_nodes(), 
+    "nodes and",
+    twitch.number_of_edges(),
+    "edges"
+    )
+```
+
+This graph is difficult to draw in its entirety. We can zoom in on a subset by selecting a node and its **ego graph**, which includes its neighbors along with all edges between the captured nodes.
+
+```{python}
+ego = nx.ego_graph(twitch, 400)
+nx.draw(ego, with_labels=True, node_size=800, node_color="yellow")
+```
+
+Notice that the nodes of the ego network have the same labels as they did in the graph that it was taken from. We can widen the ego graph to include the ego graphs of all the neighbors:
+
+```{python}
+big_ego = nx.ego_graph(twitch, 400, radius=2)
+print(big_ego.number_of_nodes(), "nodes and", 
+    big_ego.number_of_edges(), "edges")
+
+pos = nx.spring_layout(big_ego, iterations=60)
+nx.draw(big_ego, 
+    pos=pos, width=0.2, node_size=10, node_color="purple")
+```
+
+The reason for the two-step process in making the drawing above is that computing the node positions via springs takes a hidden computational iteration. By calling that iteration explicitly, we were able to stop it early and save time.
+
+### Degree and average degree
+
+The **degree** of a node is the number of edges that have the node as an endpoint. Equivalently, it is the number of nodes in its ego graph, minus the original node itself. The **average degree** of a graph is the mean of the degrees of all of its nodes. 
+
+The `degree` property of a graph gives a dictionary-style object of all nodes with their degrees.
+
+```{python}
+ego.degree
+```
+
+The result here can be a bit awkward to work with; it's actually a *generator* of a list, rather than the list itself. (This "lazy" attitude is useful when dealing with very large networks.) So, for instance, we can collect it into a list of ordered tuples:
+
+```{python}
+list(ego.degree)
+```
+
+It can be convenient to use a series or frame to keep track of quantities like degree that are associated with nodes.
+
+```{python}
+nodes = pd.Index(ego.nodes)
+degrees = pd.Series(dict(ego.degree), index=nodes)
+print("average degree of ego graph:", degrees.mean())
+```
+
+There's a much easier way to compute this particular quantity, however. If we sum the degrees of all the nodes in a graph, we must get twice the number of edges in the graph. For $n$ nodes and $e$ edges, the average degree is therefore $2m/n$.
+
+```{python}
+def average_degree(g):
+    return 2*g.number_of_edges() / g.number_of_nodes()
+
+print("average degree of Twitch network:", average_degree(twitch))
+```
+
+### Random graphs
+
+One way of understanding a real-world network is by comparing it to ones that are constructed randomly, but according to relatively simple rules. The idea is that if the real network behaves similarly to members of some random family, then perhaps it is constructed according to similar principles.
+
+An **Erdős-Rényi graph** (ER graph) includes each individual possible edge with a fixed probability $p$. That is, if you have a weighted coin that comes up heads (100p)% of the time, then you toss the coin for each possible pair of vertices and include their edge if it is heads.
+
+```{python}
+n,p = 50,0.08
+ER = nx.erdos_renyi_graph(n,p,seed=2)
+print(ER.number_of_nodes(),"nodes,",ER.number_of_edges(),"edges")
+nx.draw_circular(ER,node_size=50,edge_color="gray")
+```
+
+Since there are $\binom{n}{2}$ unique pairs among $n$ nodes, the mean number of edges in an ER graph is 
+
+$$
+p\binom{n}{2} = \frac{pn(n-1)}{2}.
+$$
+
+This fact is usually stated in terms of the average node degree, $\bar{k}$:
+
+$$
+E[\bar{k}] = \frac{1}{n} pn(n-1) = p(n-1).
+$$
+
+There are two senses of "average" going on here: in each graph instance, you find the average degree, then you take the average (expectation, $E[\cdot]$) over all random instances. Here is the distribution of $\bar{k}$ over 10000 instances when its expected value is $4.0$:
+
+```{python}
+n,p = 41,0.1
+kbar = []
+for iter in range(10000):
+    ER = nx.erdos_renyi_graph(n,p,seed=iter+1001)
+    kbar.append(average_degree(ER))
+
+sns.displot(x=kbar,bins=16);
+```
+
+## Clustering
+
+::: {.callout-note}
+The term *clustering* has a meaning for network analysis that has virtually nothing to do with *clustering* of numerical data.
+:::
+
+In your social networks, your friends are probably more likely to be friends with each other than pure randomness would imply. There are various ways to quantify this precisely, but one of the easiest is the **local clustering coefficient**, defined for a node $i$ as
+
+$$
+C(i) = \frac{ 2 T(i) }{d_i(d_i-1)}.
+$$
+
+In this formula, $d_i$ is the degree of the node and $T(i)$ is the number of edges between node $i$'s neighbors. If $d_i=0$ or $d_i=1$, we set $C(i)=0$.
+
+Equivalently, $T(i)$ is the number of triangles in the graph that pass through node $i$. Because the subgraph of the neighbors has
+
+$$
+\binom{d_i}{2}
+$$
+
+possible edges, the value of $C(i)$ is between 0 and 1.
+
+Here is a wheel graph to help us explore a bit:
+
+```{python}
+W = nx.wheel_graph(7)
+nx.draw(W,with_labels=True,node_color="lightblue")
+```
+
+::::{#exm-networks-cluster-small-world}
+Let's find the clustering coefficient for each node in the wheel graph drawn above.
+
+Node 0 in this graph is adjacent to 6 other nodes, and there are 6 triangles passing through it. Thus, its clustering coefficient is
+
+$$
+C(0) = \frac{6}{6 \cdot 5 / 2} = \frac{2}{5}.
+$$
+
+Every other node has 3 friends and 2 triangles, so they each have
+
+$$
+C(i) = \frac{2}{3 \cdot 2 / 2} = \frac{2}{3}, \quad i\neq 0.
+$$
+::::
+
+In NetworkX, we can manually count the number of edges among neighbors of node 0 by examining the ego subgraph.
+
+```{python}
+    nbrhood = W.subgraph(W[0])  # does not include node 0 itself
+    print(nbrhood.number_of_edges(), "edges among neighbors of node 0")
+    nx.draw(nbrhood, with_labels=True, node_color="pink")
+```
+
+More directly, the `clustering` function in NetworkX computes $C(i)$ for any single node, or for all the nodes in a graph.
+
+```{python}
+print("node 0 clustering =", nx.clustering(W,0))
+print("\nclustering at each node:")
+print( pd.Series(nx.clustering(W), index=W.nodes) )
+```
+
+In addition, the `average_clustering` function will take the average over all nodes of the local clustering values.
+
+```{python}
+print("average clustering =", nx.average_clustering(W))
+```
+
+::::{#exm-networks-cluster-er}
+Let's compute average clustering within multiple ER random graphs.
+
+```{python}
+n,p = 121,1/20
+results = []
+for iter in range(400):
+    ER = nx.erdos_renyi_graph(n, p, seed=iter+5000)
+    results.append( nx.average_clustering(ER) )
+
+sns.displot(x=results);
+```
+
+The distribution above can't be normal, because there are hard bounds at 0 and 1, but it looks similar to a normal distribution. The peak is at the value of $p$ used in the simulation, which is not a coincidence.
+
+::: {#thm-networks-clustering-er}
+The expected value of the average clustering in ER graphs of type $(n,p)$ is $p$.
+:::
+
+A formal proof of this theorem is largely superfluous; considering that each edge in the graph has a probability $p$ of inclusion, that is also the expected fraction of edges that appear within the neighborhood subgraph of any node. 
+::::
+
+::::{#exm-networks-cluster-twitch}
+Let's examine clustering within the Twitch network.
+
+```{python}
+twitch = nx.read_edgelist("musae_edges.csv", delimiter=',', nodetype=int)
+n,e = twitch.number_of_nodes(), twitch.number_of_edges()
+kbar = 2*e/n
+print(n, "nodes and", e, "edges")
+print(f"average degree is {kbar:.3f}")
+```
+
+Computing the distances between all pairs of nodes in this graph would take a rather long time, so we will estimate the average distance by sampling.
+
+```{python}
+cluster = pd.Series(nx.clustering(twitch),index=twitch.nodes)
+sns.displot(data=cluster);
+```
+
+The average clustering coefficient is 
+
+```{python}
+print( "average Twitch clustering:", cluster.mean() )
+```
+
+How does this value compare to an ER graph? If we set the number of nodes and average degree to be the same, then the expected average clustering for ER graphs is $p=\bar{k}/(n-1)$:
+
+```{python}
+print( "average equivalent ER clustering:", kbar/(n-1) )
+```
+
+This is too small by a factor of 100! Clearly, the Twitch graph is not equivalent to a random graph in the sense of ER. From a sociological perspective, of course, this is a "no duh" conclusion.
+::::
+
+### Watts–Strogatz graphs
+
+A **Watts–Strogatz graph** (WS graph) tries to model the small-world phenomenon. A WS graph has three parameters: $n$, an even integer $k$, and a probability $q$.
+
+Imagine $n$ nodes arranged in a circle. Connect each node with an edge to each of its $k/2$ left neighbors and $k/2$ right neighbors. Now we "rewire" some of the edges by visiting each node $i$ in turn. For each edge from $i$ to a neighbor, with probability $q$ replace it with an edge between $i$ and a node chosen at random from all the nodes $i$ is not currently connected to. The idea is to start with tight-knit, overlapping communities, and randomly toss in some far-flung links.
+
+```{python}
+WS = nx.watts_strogatz_graph(40, 6, 0.15, seed=1)
+nx.draw_circular(WS, node_size=100)
+```
+
+By the nature of the construction, the initial state of the network (before the rewiring phase) is highly clustered. Thus, if $q$ is close to zero, the final graph will retain much of this initial clustering.
+
+```{python}
+n, k = 60, 6
+results = []
+seed = 0
+for q in np.arange(0.05, 1.05, 0.05):
+    for iter in range(50):
+        WS = nx.watts_strogatz_graph(n, k, q, seed=seed)
+        results.append( (q, nx.average_clustering(WS)) )
+        seed += 1
+        
+results = pd.DataFrame( results, columns=["q", "mean clustering"] )
+
+print("Mean clustering in WS graphs on 60 nodes:")
+sns.relplot(results,
+    x="q", y="mean clustering",
+    kind="line"
+    );
+```
+
+Let's scale the experiment above up to the size of the Twitch network. Conveniently, the average degree is nearly 10, which is the value we will use in the WS construction. To save computation time, we will use just one WS realization at each value of $q$.
+
+```{python}
+seed = 99999
+n, k = twitch.number_of_nodes(), 10
+for q in np.arange(0.15, 0.61, 0.05):
+    WS = nx.watts_strogatz_graph(n, k, q, seed=seed)
+    print(f"q = {q:.2f}, avg WS clustering = {nx.average_clustering(WS):.4f}")
+    seed += 1
+```
+
+The mean clustering resembles the value of 0.131 for the Twitch network at around $q=0.42$, which we verify using more realizations:
+
+```{python}
+seed = 999
+n,k,q = twitch.number_of_nodes(),10,0.42
+cbar = []
+for iter in range(10):
+    WS = nx.watts_strogatz_graph(n, k, q, seed=seed)
+    cbar.append( nx.average_clustering(WS) )
+    seed += 10
+print( "avg WS clustering at q = 0.42:", np.mean(cbar) )
+```
+
+The WS construction gives a plausible way to reconstruct the clustering observed in the Twitch network. However, there are other graph properties left to examine.
+
+
+## Distance
+
+The *small-world phenomenon* is, broadly speaking, the observation that any two people in a group can be connected by a surprisingly short path of acquaintances. This concept appears, for instance, in the *Bacon number game*, where actors are nodes, appearing in the same movie creates an edge between them, and one tries to find the distance between Kevin Bacon and some other designated actor. 
+
+The **distance** between two nodes in a connected graph is the number of edges in the shortest path between them. For example, in a complete graph, the distance between any pair of distinct nodes is 1, since all possible pairs are connected by an edge.
+
+```{python}
+K5 = nx.complete_graph(5)
+dist = pd.Series(nx.shortest_path_length(K5,0), index=K5.nodes)
+print("Distance from node 0:", dist)
+```
+
+The maximum distance over all pairs of nodes in a graph is called its **diameter**. Since this value depends on an extreme outlier in the distribution of distances, we often preferr to use the **average distance** as a measure of how difficult it is to connect two randomly selected nodes.
+
+For example, here is a wheel graph:
+
+```{python}
+W = nx.wheel_graph(7)
+nx.draw(W, with_labels=True, node_color="lightblue")
+```
+
+No node is more than two hops away from another (if the first hop is to node 0), so the diameter of this graph is 2. The average distance is somewhat smaller. This graph is so small that we can easily find the entire matrix of pairwise distances. The matrix is symmetric, so it's only necessary to compute its upper triangle.
+
+```{python}
+nodes = list(W.nodes)
+n = len(nodes)
+D = np.zeros( (n,n), dtype=int )
+for i in range(n):
+    for j in range(i+1,n):
+        D[i,j] = nx.shortest_path_length(W, nodes[i], nodes[j]) 
+
+print(D)
+```
+
+To get the average distance, we can sum over all the entries and divide by $\binom{n}{2}$:
+
+```{python}
+print( "average distance:", 2*D.sum() / (n*(n-1)) )
+```
+
+There is a convenience function for computing this average. (It becomes slow as $n$ grows, though.)
+
+```{python}
+print( "average distance:", nx.average_shortest_path_length(W) )
+```
+
+### ER graphs
+
+If we want to compute distances within ER random graphs, we quickly run into a problem: an ER graph may not have a path between every pair of nodes:
+
+```{python}
+n, p = 101, 1/25
+ER = nx.erdos_renyi_graph(n, p, seed=0)
+nx.draw(ER, node_size=50)
+```
+
+We say that such a graph is not **connected**. When no path exists between two nodes, the distance between them is either undefined or infinite. NetworkX will give an error if we try to compute the average distance in a disconnected graph:
+
+```{python}
+#| error: true
+nx.average_shortest_path_length(ER)
+```
+
+One way to cope with this eventuality is to decompose the graph into **connected components**, a disjoint separation of the nodes into connected subgraphs. We can use `nx.connected_components` to get node sets for each component.
+
+```{python}
+[ len(cc) for cc in nx.connected_components(ER) ]
+```
+
+The result above tells us that removing the lone unconnected node in the ER graph leaves us with a connected component. We can always get the largest component with the following idiom:
+
+```{python}
+ER_sub = ER.subgraph( max(nx.connected_components(ER), key=len) )
+print(ER_sub.number_of_nodes(), "nodes in largest component")
+```
+
+Now the average path length is a valid computation.
+
+```{python}
+nx.average_shortest_path_length(ER_sub)
+```
+
+Let's use this method to examine average distances within ER graphs of a fixed type.
+
+```{python}
+n,p = 121,1/20
+dbar = []
+for iter in range(100):
+    ER = nx.erdos_renyi_graph(n, p, seed=iter+5000)
+    ER_sub = ER.subgraph( max(nx.connected_components(ER), key=len) )
+    dbar.append( nx.average_shortest_path_length(ER_sub) )
+
+print("average distance in the big component of ER graphs:")
+sns.displot(x=dbar, bins=13);
+```
+
+The chances are good, therefore, that any message could be passed along in three hops or fewer (within the big component). In fact, theory states that as $n\to\infty$, the mean distance in ER graphs is expected to be approximately 
+
+$$
+\frac{\ln(n)}{\ln(\bar{k})}.
+$$ {#eq-networks- small-world-ERdistance}
+
+For $n=121$ and $\bar{k}=6$ as in the experiment above, this value is about 2.68.
+
+### Watts–Strogatz graphs
+
+The Watts–Strogatz model was originally proposed to demonstrate small-world networks. The initial ring-lattice structure of the construction exhibits both large clustering and large mean distance:
+
+```{python}
+G = nx.watts_strogatz_graph(400, 6, 0)  # q=0 ==> initial ring lattice
+C0 = nx.average_clustering(G)
+L0 = nx.average_shortest_path_length(G)
+print(f"Ring lattice has average clustering {C0:.4f}")
+print(f"and average shortest path length {L0:.2f}")
+```
+
+At the other extreme of $p=1$, we get an ER random graph, which (at equivalent parameters) has small clustering and small average distance. The most interesting aspect of WS graphs is the transition between these extremes as $p$ varies.
+
+```{python}
+cbar, dbar, logq = [],[],[]
+for lq in np.arange(-3.5, 0.01, 0.25):
+    for iter in range(8):
+        G = nx.watts_strogatz_graph(400, 6, 10**lq, seed=975+iter)
+        cbar.append( nx.average_clustering(G) / C0 )
+        dbar.append( nx.average_shortest_path_length(G) / L0 )
+        logq.append(lq)
+    
+```
+
+```{python}
+results = pd.DataFrame( {"log10(q)":logq, "avg clustering":cbar, "avg distance":dbar} )  
+sns.relplot(data=pd.melt(results, id_vars="log10(q)"),
+            x="log10(q)", y="value",
+            hue="variable", kind="line"
+            );
+```
+
+The horizontal axis above is $\log_{10}(q)$, and the vertical axis shows the average clustering and shortest path length normalized by their values at $q=0$. Watts and Strogatz raised awareness of the fact that for quite small values of $q$, i.e., relatively few nonlocal connections, there are networks with a large clustering coefficient and small average distance.
+
+### Twitch network
+
+Let's consider distances within the Twitch network.
+
+```{python}
+twitch = nx.read_edgelist("musae_edges.csv", delimiter=',', nodetype=int)
+n, e = twitch.number_of_nodes(), twitch.number_of_edges()
+kbar = 2*e/n
+print(n, "nodes and", e, "edges")
+print(f"average degree is {kbar:.3f}")
+```
+
+Computing the distances between all pairs of nodes in this graph would take a rather long time, so we will sample some pairs randomly.
+
+```{python}
+rng = default_rng(1)
+
+# Compute the distance between a random pair of distinct nodes:
+def pairdist(G):
+    n = nx.number_of_nodes(G)
+    i = j = rng.integers(0,n)
+    while i==j: j=rng.integers(0,n)   # get distinct nodes
+    return nx.shortest_path_length(G,source=i,target=j)
+
+distances = [ pairdist(twitch) for _ in range(50000) ]
+print("Pairwise distances in Twitch graph:")
+sns.displot(x=distances, discrete=True)
+print( "estimated mean =", np.mean(distances) )
+```
+
+Let's compare these results to ER graphs with the same size and average degree, i.e., with $p=\bar{k}/(n-1)$. The theoretical estimate from above gives
+
+```{python}
+print( "Comparable ER graphs expected mean distance:", np.log(n) / np.log(kbar) )
+```
+
+The Twitch network has a slightly smaller value than this, but the numbers are comparable. However, remember that the ER graphs have a negligible clustering coefficient.
+
+Next we explore Watts–Strogatz graphs with the same $n$ as the Twitch network and $k=10$ to get a similar average degree.
+
+```{python}
+results = []
+seed = 44044
+n, k = twitch.number_of_nodes(), 10
+for q in np.arange(0.1, 0.76, 0.05):
+    for iter in range(10):
+        WS = nx.watts_strogatz_graph(n, k, q, seed=seed)
+        dbar = sum(pairdist(WS) for _ in range(60))/60
+        results.append( (q,dbar) )
+        seed += 7
+
+results = pd.DataFrame( results, columns=["q", "avg distance"] )
+print("Pairwise distances in WS graphs:")
+sns.relplot(results, x="q", y="avg distance", kind="line");
+```
+
+The decrease with $q$ is less pronounced that it was for the smaller WS graphs above. In the previous section, we found that $q=0.42$ reproduces the same average clustering as in the Twitch network. That corresponds to a mean distance of about 4.5, which is a bit above the observed Twitch mean distance of 3.87, but not dramatically so. Thus, the Watts-Strogatz model could still be considered a plausible one for the Twitch network. In the next section, though, we will see that it misses badly in at least one important aspect.
+
+## Degree distributions
+
+As we know, means of distributions do not always tell the entire story. For example, the distribution of the degrees of all the nodes in our Twitch network has some surprising features.
+
+```{python}
+twitch = nx.read_edgelist("musae_edges.csv", delimiter=',', nodetype=int)
+twitch_degrees = pd.Series( dict(twitch.degree), index=twitch.nodes )
+twitch_degrees.describe()
+```
+
+Observe above that that there is a significant disparity between the mean and median values of the degree distribution, and that the standard deviation is much larger than the mean. A histogram plot confirms that the degree distribution is widely dispersed:
+
+```{python}
+print("Twitch network degree distribution:")
+sns.displot(twitch_degrees);
+```
+
+A few nodes in the network have hundreds of friends:
+
+```{python}
+friend_counts = twitch_degrees.value_counts()  # histogram heights
+friend_counts.sort_index(ascending=False)
+```
+
+These "gregarious nodes" or *hubs* are characteristic of many social and other real-world networks.
+
+We can compare the above distribution to that in a collection of ER graphs with the same size and expected average degree.
+
+```{python}
+n, e = twitch.number_of_nodes(), twitch.number_of_edges()
+kbar = 2*e/n
+p = kbar/(n-1)
+degrees = []
+for iter in range(3):
+    ER = nx.erdos_renyi_graph(n, p, seed=111+iter)
+    degrees.extend( [ER.degree(i) for i in ER.nodes] )
+
+print("ER graphs degree distribution:")
+sns.displot(degrees, discrete=True);
+```
+
+Theory proves that the plot above converges to a *binomial distribution*. This is yet another indicator that the ER model does not explain the Twitch network well. A WS graph has a similar distribution:
+
+```{python}
+k,q = 10, 0.42
+degrees = []
+for iter in range(3):
+    WS = nx.watts_strogatz_graph(n, k, q, seed=222+iter)
+    degrees.extend( [WS.degree(i) for i in WS.nodes] )
+
+print("WS graphs degree distribution:")
+sns.displot(degrees, discrete=True);
+```
+
+### Power-law distribution
+
+The behavior of the Twitch degree distribution gets very interesting when the axes are transformed to use log scales:
+
+```{python}
+hist = sns.displot(data=twitch_degrees, log_scale=True)
+hist.axes[0,0].set_yscale("log")
+```
+
+For degrees between 10 and several hundred, the counts lie nearly on a straight line. That is, if $x$ is degree and $y$ is the node count at that degree, then
+
+$$
+\log(y) \approx  - a\cdot \log(x) + b,
+$$
+
+i.e.,
+
+$$
+y \approx B x^{-a},
+$$
+
+for some $a > 0$. This relationship is known as a **power law**. Many social networks seem to follow a power-law distribution of node degrees, to some extent. (The precise extent is a subject of hot debate.)
+
+Note that the decay of $x^{-a}$ to zero as $x\to\infty$ is much slower than, say, the normal distribution's $e^{-x^2/2}$, or even just an exponential $e^{-cx}$. This last comparison is how a *heavy-tailed distribution* is usually defined. 
+
+We can get a fair estimate of the constants $B$ and $a$ in the power law by doing a least-squares fit on the logs of $x$ and $y$. First, we need the counts:
+
+```{python}
+y = twitch_degrees.value_counts()
+counts = pd.DataFrame( {"degree": y.index, "count": y.values} )
+counts = counts[ (counts["degree"] > 10) & (counts["degree"] < 200) ];
+counts.head(6)
+```
+
+Now we will get additional columns by log transformations. (Note: the `np.log` function is the natural logarithm.)
+
+```{python}
+logcounts = counts.transform(np.log)
+```
+
+Now we use `sklearn` for a linear regression.
+
+```{python}
+from sklearn.linear_model import LinearRegression
+lm = LinearRegression()
+lm.fit(logcounts[["degree"]], logcounts["count"])
+lm.coef_[0], lm.intercept_
+```
+
+The first value, which is both the slope of the line and the exponent of $x$ in the power law, is the most interesting part. It estimates that the degree counts vary as $Bx^{-2.1}$ over a wide range of degrees.
+
+### Barabási--Albert graphs
+
+A random **Barabási--Albert** graph (BA graph) is constructed by starting with a small seed network and connecting one node at a time with $m$ new edges to it. Edges are added randomly, but higher probability is given to connect to nodes that already have higher degree (i.e., are more "popular"), a concept known as *preferential attachment*. Because of this rule, there is a natural tendency to develop a few hubs of high degree.
+
+```{python}
+BA = nx.barabasi_albert_graph(100, 2, seed=0)
+BA_degrees = pd.Series( dict(BA.degree), index=BA.nodes )
+nx.draw(BA, node_size=8*BA_degrees, node_color="red")
+```
+
+When we match these graphs to the size and average degree of the Twitch network, a power-law distribution emerges.
+Since we add $m$ edges (almost) $n$ times, the expected average degree is $2mn/n=2m$. Therefore, in the BA construction we want to choose 
+
+$$
+m \approx \frac{\bar{k}}{2}. 
+$$
+
+
+```{python}
+m = round(kbar/2)
+BA = nx.barabasi_albert_graph(n, m, seed=5)
+BA_degrees = pd.Series( dict(BA.degree), index=BA.nodes )
+hist = sns.displot(BA_degrees, log_scale=True)
+hist.axes[0,0].set_yscale("log")
+```
+
+Theory predicts that the exponent of the power-law distribution in a BA graph is $-3$.
+
+```{python}
+y = BA_degrees.value_counts()
+counts = pd.DataFrame( {"degree":y.index, "count":y.values} )
+counts = counts[ (counts["degree"] > 5) & (counts["degree"] < 80) ]
+logcounts = counts.transform(np.log)
+lm.fit( logcounts[["degree"]], logcounts["count"] )
+print( "exponent of power law:", lm.coef_[0] )
+```
+
+Let's check distances and clustering, too. As a reminder, the mean distance in the Twitch network is approximately:
+
+```{python}
+from numpy.random import default_rng
+rng = default_rng(1)
+
+def pairdist(G):
+    n = nx.number_of_nodes(G)
+    i = j = rng.integers(0, n)
+    while i==j: j=rng.integers(0, n)   # get distinct nodes
+    return nx.shortest_path_length(G, source=i, target=j)
+
+print("Mean distance in Twitch graph:",
+    sum(pairdist(twitch) for _ in range(4000)) / 4000 )
+```
+
+Now we repeat that for some BA graphs.
+
+```{python}
+dbar = []
+seed = 911
+for iter in range(10):
+    BA = nx.barabasi_albert_graph(n, m, seed=seed)
+    d = sum(pairdist(BA) for _ in range(200)) / 200
+    dbar.append(d)
+    seed += 1
+
+print( "Mean distance in BA graphs:", np.mean(dbar) )
+```
+
+Not bad! Now, let's check the clustering. For Twitch, we have:
+
+```{python}
+print( "Mean clustering in Twitch graph:", nx.average_clustering(twitch) )
+```
+
+And for BA, we get
+
+```{python}
+cbar = []
+seed = 59
+for iter in range(20):
+    BA = nx.barabasi_albert_graph(n, m, seed=seed)
+    cbar.append( nx.average_clustering(BA) )
+    seed += 1
+    
+print( "Mean clustering in BA graphs:", np.mean(cbar) )
+```
+
+The BA model is our closest approach so far, but it fails to produce the close-knit neighbor subgraphs that we find in the Twitch network and the WS model.
+
+## Centrality
+
+In some applications we might want to know which nodes of a network are the most important. For instance, we might want to find influential members of a social network, or nodes that are critical for efficient connections within the network. These traits go under the general name of **centrality**. 
+
+An easy candidate for measuring the centrality of a node is its degree. Usually this is normalized by the number of nodes in the graph and called **degree centrality**. While it can yield useful infortmation in some networks, it is not always a reliable measuring stick. For example, consider the following Watts–Strogatz graph:
+
+```{python}
+G = nx.watts_strogatz_graph(60, 2, .1, seed=6)
+pos = nx.spring_layout(G,seed=1)
+style = dict(pos=pos, edge_color="gray", node_color="pink", with_labels=True)
+nx.draw(G, **style, node_size=120)
+```
+
+There is little variation in the degrees of the nodes. In fact, there are only 3 unique values of the degree centrality:
+
+```{python}
+centrality = pd.DataFrame( {"degree":nx.degree_centrality(G)}, index=G.nodes )
+sns.displot(centrality, x="degree");
+```
+
+From the drawing of the graph, however, it's clear that (for instance) nodes 3 and 6 do not have comparable roles, despite the fact that both have degree equal to 2.
+
+### Betweenness centrality
+
+A different way to measure centrality is to use shortest paths between nodes. Let $\sigma(i,j)$ denote the number of shortest paths between nodes $i$ and $j$. This means that we count the number of unique ways to get between these nodes using the minimum possible number of edges. Let $\sigma(i,j|k)$ be the number of such paths that pass through node $k$. Then, for a graph on $n$ nodes, the **betweenness centrality** of node $k$ is
+
+$$
+c_B(k) = \frac{1}{\binom{n-1}{2}}\, \displaystyle\sum_{\substack{\text{all pairs }i,j\\i\neq k,\,j\neq k}} \frac{\sigma(i,j|k)}{\sigma(i,j)}.
+$$
+
+Each term in the sum is less than or equal to 1, and the number of terms in the sum is $\binom{n-1}{2}$, so $0\le c_B \le 1$ for any node. The definition requires an expensive computation if the number of nodes is more than a few hundred, so the $\sigma$ values are often estimated by sampling.
+
+::::{#exm-networks-between-barbell}
+We will find the betweenness centrality of the following *barbell graph*:
+
+![Barbell graph](_media/barbell.svg){width="350"}
+
+Let's begin with node 3, in the middle. Any path, and therefore any shortest path, between nodes 0, 1, or 2 and nodes 4, 5, or 6 must pass through node 3, so these pairings each contribute 1 to the sum. The shortest paths for pairs of nodes within the end triangles clearly do not pass through node 3. Hence 
+
+$$
+c_B(3) = \frac{1}{15} \cdot (3\cdot 3) = \frac{3}{5}.
+$$
+
+Next, consider node 2. The shortest paths through this node are the ones that pair nodes 0 or 1 with nodes 3, 4, 5, or 6, so
+
+$$
+c_B(2) = \frac{1}{15} \cdot (2\cdot 4) = \frac{8}{15}.
+$$
+
+By symmetry, we get the same value for node 4.
+
+All the other nodes play no role in any shortest paths. For instance, any path passing through node 0 can be replaced with a shorter one that follows the edge between nodes 1 and 2. Hence $c_B$ is zero on these nodes.
+::::
+
+The `betweenness_centrality` function returns a dictionary with nodes as keys and $c_B$ as values.
+
+```{python}
+centrality["between"] = pd.Series(nx.betweenness_centrality(G), index=G.nodes)
+sns.displot(centrality, x="between");
+```
+
+The distribution above shows that few nodes have a relatively high betweenness score in our graph.
+
+### Eigenvector centrality
+
+A different way of distinguishing nodes of high degree is to suppose that not all links are equally valuable. By analogy with ranking sports teams, where wins over good teams should count for more than wins over bad teams, we should assign more importance to nodes that link to other important nodes. 
+
+We can try to turn this idea into an algorithm as follows. Suppose we initially assign uniform centrality scores $x_1,\ldots,x_n$ to all of the nodes. Now we can update the scores by looking at the current scores for all the neighbors. Specifically, the new scores are
+
+$$
+x_i^+ = \sum_{j\text{ adjacent to }i} x_j = \sum_{j=1}^n A_{ij} x_j,\quad i=1,\ldots,n,
+$$
+
+where $A_{ij}$ are entries of the adjacency matrix. Once we have updated the scores, we can repeat the process to update them again, and so on. If the scores were to converge, in the sense that $x_i^+$ approaches $x_i$, then we would have a solution of the equation
+
+$$
+x_i \stackrel{?}{=} \sum_{j=1}^n A_{ij} x_j, \quad i=1,\ldots,n.
+$$
+
+In fact, since the sums are all inner products across rows of $\bfA$, this is simply
+
+$$
+\bfx \stackrel{?}{=} \bfA \bfx.
+$$
+
+Except for $\bfx$ equal to the zero vector, this equation does not have a solution in general. However, if we relax it just a bit, we get somewhere important. Instead of equality, let's look for *proportionality*, i.e.,
+
+$$
+\lambda \bfx = \bfA \bfx
+$$
+
+for a number $\lambda$. This is an **eigenvalue equation**, one of the fundamental problems in linear algebra. 
+
+::::{prf:example}
+:label: example-centrality-eigenvector
+Consider the complete graph $K_3$, which is just a triangle. Its adjacency matrix is
+
+$$
+\bfA = \begin{bmatrix} 
+0 & 1 & 1 \\ 1 & 0 & 1 \\ 1 & 1 & 0
+\end{bmatrix}.
+$$
+
+We should hope that all three vertices are ranked equally. In fact, if we define $\bfx=\tfrac{1}{3}[1,1,1]$, then 
+
+$$
+\bfA \bfx = \bigl[\tfrac{2}{3},\tfrac{2}{3},\tfrac{2}{3} \bigr] = 2 \bfx,
+$$
+
+so that $\lambda=2$ is an eigenvalue to go with eigenvector $\bfx$. Note that any (nonzero) multiple of $\bfx$ would work just as well:
+
+$$
+\bfA (c \bfx) =  \bigl[\tfrac{2}{3}c,\tfrac{2}{3}c,\tfrac{2}{3}c \bigr] = 2 (c\bfx),
+$$
+
+so that $c\bfx$ is also an eigenvector. All that the eigenvector gives us, then, is *relative* centrality of the nodes, though it would be natural to normalize it so that its elements sum to 1.
+::::
+
+
+Every $n\times n$ matrix has at least one nonzero solution to the eigenvalue equation, although complex numbers might be involved. For an adjacency matrix, the *Perron–Frobenius theorem* guarantees a real solution for some $\lambda > 0$ and for which the $x_i$ all have the same sign. That last property allows us to interpret the $x_i$ as relative importance or centrality of the nodes. This is called **eigenvector centrality**.
+
+NetworkX has two functions for computing eigenvector centrality. Here we use the one that calls on numpy to solve the eigenvalue problem. As with betweenness centrality, the return value is a dictionary with nodes as the keys.
+
+```{python}
+centrality["eigen"] = pd.Series(nx.eigenvector_centrality_numpy(G),index=G.nodes)
+sns.displot(data=centrality,x="eigen");
+```
+
+You can see above that eigenvector centrality distinguishes a small number of nodes in our example.
+
+### Comparison
+
+We can verify using correlation coefficients that while the three centrality measures are related, they are far from redundant:
+
+```{python}
+centrality.corr()
+```
+
+Here is how betweenness ranks the centrality of the nodes:
+
+```{python}
+centrality.sort_values(by="between", ascending=False).head(8)
+```
+
+As you can see, the top two are quite clear, and a drawing of the graph supports the case that they are central:
+
+```{python}
+nx.draw(G, node_size=500*centrality["between"], **style)
+```
+
+A weakness, though, is that there is are many secondary nodes whose values taper off only slowly as we enter the remote branches.
+
+Here is a ranking according to eigenvector centrality:
+
+```{python}
+centrality.sort_values(by="eigen", ascending=False).head(8)
+```
+
+This ranking has a clear top choice, followed by two that are nearly identical.
+
+```{python}
+nx.draw(G, node_size=800*centrality["eigen"], **style)
+```
+
+Eigenvector centrality identifies a more compact and distinct center. Of course, these observations are all made for a single network, so be careful not to over-generalize!
+
+### Power-law example
+
+Let's take a look at centrality measures for a power-law graph of the same size. By construction, a BA graph has a hub-and-spoke structure.
+
+```{python}
+G = nx.barabasi_albert_graph(60, 1, seed=2)
+style["pos"] = nx.spring_layout(G, seed=3)
+nx.draw(G, **style, node_size=120)
+```
+
+Degree centrality certainly notices the gregarious node 0:
+
+```{python}
+centrality = pd.DataFrame( {"degree":nx.degree_centrality(G)}, index=G.nodes )
+nx.draw(G, node_size=1000*centrality["degree"], **style)
+```
+
+However, as you see above, the secondary hubs do not stand out much. Betweenness centrality highlights them quite nicely here:
+
+```{python}
+centrality["between"] = pd.Series(nx.betweenness_centrality(G))
+nx.draw(G, node_size=600*centrality["between"], **style)
+```
+
+On the other hand, eigenvector centrality puts a lot of emphasis on the friends of node 0, even the ones that are dead ends, at the expense of the secondary hubs:
+
+```{python}
+centrality["eigen"] = pd.Series( nx.eigenvector_centrality_numpy(G) )
+nx.draw(G, node_size=600*centrality["eigen"], **style)
+```
+
+This undesirable aspect of eigenvector centrality can be fixed through an extra normalization by the node degree, so that the hub node divides its "attention" into smaller parts. Such thinking leads to the *PageRank* algorithm, which is what put Google on the map for web searches.
+
+### Friendship paradox
+
+A surprising fact about social networks is that on average, your friends have more friends than you do, a fact that is called the **friendship paradox**. Let $\mathbf{d}$ be an $n$-vector whose components are the degrees of the nodes in the network. On average, the number of "friends" (i.e., adjacent nodes) is the average degree, which is equal to
+
+$$
+\frac{\onenorm{\mathbf{d}}}{n}. 
+$$
+
+Now imagine that we create a list as follows: for each node $i$, add to the list the number of friends of each of $i$'s friends. The mean value of this list is the average number of "friends of friends." 
+
+For example, consider the following graph:
+
+```{python}
+L = nx.lollipop_graph(4, 1)
+nx.draw(L, with_labels=True, node_color="lightblue")
+```
+
+The average degree is $(3+3+3+4+1)/5=14/5$. Here are the entries in our friends-of-friends list contributed by each node:
+
+* Node 0: 3 (from node 1), 3 (from node 2), 4 (from node 3)
+* Node 1: 3 (from node 0), 3 (from node 2), 4 (from node 3)
+* Node 2: 3 (from node 0), 3 (from node 1), 4 (from node 3)
+* Node 3: 3 (from node 0), 3 (from node 1), 3 (from node 2), 1 (from node 4)
+* Node 4: 4 (from node 3)
+
+The average value of this list, i.e., the average number of friends' friends, is $44/14=3.143$, which is indeed larger than the average degree.
+
+There is an easy way to calculate this value in general. Node $i$ contributes $d_i$ terms to the list, so the total number of terms is $\onenorm{\mathbf{d}}$. We observe that node $i$ appears $d_i$ times in the list, each time contributing the value $d_i$, so the sum of the entire list must be 
+
+$$
+\sum_{i=1}^n d_i^2 = \twonorm{\mathbf{d}}^2 = \mathbf{d}^T \mathbf{d}. 
+$$
+
+Hence the mathematical statement of the friendship paradox is
+
+$$
+\frac{\onenorm{\mathbf{d}}}{n} \le \frac{\mathbf{d}^T \mathbf{d}}{\onenorm{\mathbf{d}}}.
+$$ {#eq-networks-friendship-paradox}
+
+You are asked to prove this inequality in the exercises. Here is a verification for the BA graph above:
+
+```{python}
+n = G.number_of_nodes()
+d = pd.Series(dict(G.degree), index=G.nodes)
+dbar = d.mean()
+dbar_friends = np.dot(d,d) / d.sum()
+
+print(dbar, "is less than", dbar_friends)
+```
+
+The friendship paradox generalizes to eigenvector centrality: the average centrality of all nodes is less than the average of the centrality of all nodes' friends. The mathematical statement is 
+$$
+\frac{\onenorm{\mathbf{x}}}{n} \le \frac{\mathbf{x}^T \mathbf{d}}{\onenorm{\mathbf{d}}},
+$$ {#eq-networks-eigen-paradox}
+where $\bfx$ is the eigenvector defining centrality of the nodes.
+
+```{python}
+x = centrality["eigen"]
+xbar = x.mean()
+xbar_friends = np.dot(x,d) / sum(d)
+print(xbar, "is less than", xbar_friends)
+```
+
+In fact, the friendship paradox inequality for any vector $\bfx$ is equivalent to $\bfx$ having nonnegative correlation with the degree vector.
+
+## Communities
+
+In applications, one may want to identify *communities* within a network. There are many ways to define this concept precisely. We will choose a **random-walk** model.
+
+Imagine that a bunny sits on node $i$. In one second, the bunny hops to one of $i$'s neighbors, chosen randomly. In the next second, the bunny hops to another node chosen randomly from the neighbors of the one it is sitting on, etc. This is a random walk on the nodes of the graph.
+
+Now imagine that we place another bunny on node $i$ and track its path as it hops around the graph. Then we place another bunny, etc., so that we have an ensemble of walks. We can now reason about the *probability* of the location of the walk after any number of hops. Initially, the probability of node $i$ is 100%. If $i$ has $m$ neighbors, then each of them will have probability $1/m$ after one hop, and all the other nodes (including $i$ itself) have zero probability. 
+
+Let's keep track of the probabilities for this simple wheel graph:
+```{python}
+G = nx.wheel_graph(5)
+nx.draw(G, node_size=300, with_labels=True, node_color="yellow")
+```
+
+We start at node 4. This corresponds to the probability vector
+
+$$
+\bfp = [0,0,0,0,1].
+$$
+
+On the first hop, we are equally likely to visit each of the nodes 0, 1, or 3. This implies the probability distribution
+
+$$
+\mathbf{q} = \left[\tfrac{1}{3},\tfrac{1}{3},0,\tfrac{1}{3},0\right].
+$$
+
+Let's now find the probability of standing on node 0 after the next hop. The two possible histories are 4-1-0 and 4-3-0, with total probability
+
+$$
+\underbrace{\frac{1}{3}}_{\text{to 1}} \cdot \underbrace{\frac{1}{3}}_{\text{to 0}} + \underbrace{\frac{1}{3}}_{\text{to 3}} \cdot \underbrace{\frac{1}{3}}_{\text{to 0}} = \frac{2}{9}.
+$$
+
+What about node 2 after two hops? The viable paths are 4-0-2, 4-1-2, and 4-3-2. Keeping in mind that node 0 has 4 neighbors, we get
+
+$$
+\underbrace{\frac{1}{3}}_{\text{to 0}} \cdot \underbrace{\frac{1}{4}}_{\text{to 2}} + \underbrace{\frac{1}{3}}_{\text{to 1}} \cdot \underbrace{\frac{1}{3}}_{\text{to 2}} + \underbrace{\frac{1}{3}}_{\text{to 3}} \cdot \underbrace{\frac{1}{3}}_{\text{to 2}}= \frac{11}{36}.
+$$
+
+This quantity is actually an inner product between the vector $\mathbf{q}$ (probabilities of the prior location) and 
+
+$$
+\bfw_2 = \left[ \tfrac{1}{4},\, \tfrac{1}{3},\, 0,\, \tfrac{1}{3},\, 0 \right],
+$$
+
+which encodes the chance of hopping directly to node 2 from anywhere. In fact, the entire next vector of probabilities is just
+
+$$
+\bigl[ \bfw_1^T \mathbf{q},\, \bfw_2^T \mathbf{q},\, \bfw_3^T \mathbf{q},\, \bfw_4^T \mathbf{q},\, \bfw_5^T \mathbf{q} \bigr] = \bfW \mathbf{q},
+$$
+
+where $\bfW$ is the $n\times n$ matrix whose rows are $\bfw_1,\bfw_2,\ldots.$ In terms of matrix-vector multiplications, we have the easy statement that the probability vectors after each hop are
+
+$$
+\bfp, \bfW\bfp, \bfW(\bfW\bfp), \ldots.
+$$
+
+Explicitly, the matrix $\bfW$ is 
+
+$$
+\bfW = \begin{bmatrix} 
+0 & \tfrac{1}{3}  & \tfrac{1}{3}  & \tfrac{1}{3}  & \tfrac{1}{3} \\
+\tfrac{1}{4} & 0 & \tfrac{1}{3}  & 0  & \tfrac{1}{3} \\
+\tfrac{1}{4} & \tfrac{1}{3} & 0 & \tfrac{1}{3} & 0 \\
+\tfrac{1}{4} & 0 & \tfrac{1}{3} & 0 & \tfrac{1}{3} \\
+\tfrac{1}{4} & \tfrac{1}{3} & 0 & \tfrac{1}{3} & 0
+\end{bmatrix}.
+$$
+
+This has a lot of resemblance to the adjacency matrix
+
+$$
+\bfA = \begin{bmatrix} 
+0 & 1  & 1  & 1  & 1 \\
+1 & 0 & 1 & 0  & 1 \\
+1 & 1 & 0 & 1 & 0 \\
+1 & 0 & 1 & 0 & 1 \\
+1 & 1 & 0 & 1 & 0
+\end{bmatrix}.
+$$
+
+The only difference is that each column has to be normalized by the number of options outgoing at that node, i.e., the degree of the node. Thus,
+
+$$
+W_{ij} = \frac{1}{\operatorname{deg}(j)}\,A_{ij}.
+$$
+
+### Simulating the random walk
+
+Let's do a simulation for a more interesting graph:
+
+```{python}
+WS = nx.watts_strogatz_graph(40, 4, 0.04, seed=11)
+pos = nx.spring_layout(WS, k=0.25, seed=1, iterations=200)
+style = dict(pos=pos, with_labels=True, node_color="pink", edge_color="gray")
+
+nx.draw(WS, node_size=240, **style)
+```
+
+First, we construct the random-walk matrix $\bfW$.
+
+```{python}
+n = WS.number_of_nodes()
+A = nx.adjacency_matrix(WS).astype(float)
+degree = [ WS.degree[i] for i in WS.nodes ] 
+
+W = A.copy()
+for j in range(n):
+    W[:,j] /= degree[j]
+
+sns.heatmap(W.toarray()).set_aspect(1);
+```
+
+We set up a probability vector to start at node 0, and then use `W.dot` to compute the first hop. The result is to end up at 5 other nodes with equal probability:
+
+```{python}
+init = 33
+p = np.zeros(n)
+p[init] = 1
+p = W.dot(p)
+sz = 3000*p
+print( "Total probability after 1 hop:", p.sum() )
+nx.draw(WS, node_size=sz, **style)
+```
+
+After the next hop, there will again be a substantial probability of being at node 33. But we could also be at some second-generation nodes as well.
+
+```{python}
+p = W.dot(p)
+print( "Total probability after 2 hops:", p.sum() )
+nx.draw(WS, node_size=3000*p, **style)
+```
+
+We'll take 3 more hops. That lets us penetrate a little into the distant nodes.
+
+```{python}
+for k in range(3):
+    p = W.dot(p)
+print( "Total probability after 5 hops:", p.sum() )
+nx.draw(WS, node_size=3000*p, **style)
+```
+
+In the long run, the probabilities even out, as long as the graph is connected.
+
+```{python}
+for k in range(200):
+    p = W.dot(p)
+nx.draw(WS, node_size=3000*p, **style)
+```
+
+### Label propagation
+
+The random walk brings us to a type of algorithm known as **label propagation**. We start off by "labelling" one or several nodes whose community we want to identify. This is equivalent to initializing the probability vector $\bfp$. Then, we take a running total over the entire history of the random walk:
+
+$$
+\hat{\bfx} = \lambda \bfp_1  + \lambda^2 \bfp_2 +  \lambda^3 \bfp_3 + \cdots,
+$$
+
+where $0 < \lambda < 1$ is a damping parameter, and
+
+$$
+\bfp_1 = \bfW \bfp, \, \bfp_2 = \bfW \bfp_1, \, \bfp_3 = \bfW \bfp_2,\, \ldots. 
+$$
+
+<!-- 
+. It's irresistible (and legit linear algebra) to write $\bfW (\bfW \bfp) = \bfW^2\bfp$ and so on for future iterations. Hence,
+
+$$
+\hat{\bfx} = \sum_{k=1}^\infty \lambda^k \bfW^k \bfp.
+$$ 
+-->
+
+In practice, we terminate the sum once $\lambda^k$ is sufficiently small. The resulting $\hat{\bfx}$ can be normalized to a probability distribution,
+
+$$
+\bfx = \frac{\hat{\bfx}}{\norm{\hat{\bfx}}_1}.
+$$
+
+The value $x_i$ can be interpreted as the probability of membership in the community.
+
++++
+
+Let's try looking for a community of node 0 in the WS graph above.
+
+```{python}
+p = np.zeros(n)
+p[init] = 1
+lam = 0.8
+```
+
+We will compute $\bfx$ by accumulating terms in a loop. Note that there is no need to keep track of the entire history of random-walk probabilities; we just use one generation at a time.
+
+```{python}
+x = np.zeros(n)
+mult = 1
+for k in range(200):
+    p = W.dot(p)
+    mult *= lam
+    x += mult*p
+
+x /= np.sum(x)  # normalize to probability distribution
+```
+
+The probabilities tend to be distributed logarithmically:
+
++++
+
+In the following rendering, any node $i$ with a value of $x_i < 10^{-2}$ gets a node size of 0. (You can ignore the warning below. It happens because we have negative node sizes.)
+
+```{python}
+x[x<0.01] = 0
+style["node_color"] = "lightblue"
+nx.draw(WS, node_size=4000*x, **style)
+```
+
+The parameter $\lambda$ controls how quickly the random-walk process is faded out. A smaller value puts more weight on the early iterations, generally localizing the community more strictly.
+
+```{python}
+p = np.zeros(n)
+p[init] = 1
+lam = 0.4
+x = np.zeros(n)
+mult = 1
+for k in range(200):
+    p = W.dot(p)
+    mult *= lam
+    x += mult*p
+
+x /= np.sum(x)  
+```
+
+```{python}
+x[x<0.01] = 0
+nx.draw(WS, node_size=4000*x, **style)
+```
+
+In practice, we could define a threshold cutoff on the probabilities, or set a community size and take the highest-ranking nodes. Then a new node could be selected and a community identified for it in the subgraph without the first community, etc.
+
+A more sophisticated version of the label propagation algorithm (and many other community detection methods) is offered in a special module.
+
+```{python}
+from networkx.algorithms.community import label_propagation_communities
+comm = label_propagation_communities(WS)
+[ print(c) for c in comm ];
+```
+
+```{python}
+color = np.array( ["lightblue","pink","yellow","lightgreen","purple","orange","red","lightgray"] )
+color_index = [0]*n
+for i,S in enumerate(comm):
+    for k in S:
+        color_index[k] = i
+nx.draw( WS, node_size=100, pos=pos, node_color=color[color_index] )
+```
+
+## Exercises {.unnumbered}
+
+::::{#exr-networks-basic}
+For each graph, give the number of nodes, the number of edges, and the average degree.
+
+**(a)** The complete graph $K_6$.
+
+**(b)** ![](_media/nws.svg "NWS graph"){width="380"}
+
+**(c)** ![](_media/ladder.svg "Ladder graph"){width="380"}
+::::
+
+::::{#exr-networks-adjmat}
+Give the adjacency matrix for the graphs in @exr-networks-basic (parts (a) and (b) only).
+::::
+
+::::{#exr-networks-ego}
+For the graph below, draw the ego graph of **(a)** node 4 and **(b)** node 8.
+
+![](_media/ba.svg "BA graph"){width="380" fig-align="center"}
+::::
+
+::::{#exr-networks-erprob}
+To construct an Erdős-Rényi graph on 25 nodes with expected average degree 8, what should the edge inclusion probability $p$ be?
+::::
+
+::::{#exr-networks-diam}
+Find the diameters of the graphs in @exr-networks-basic.
+::::
+
+::::{#exr-networks-degree-vector}
+Suppose that $\bfA$ is the adjacency matrix of an undirected graph on $n$ nodes. Let $\boldsymbol{1}$ be the $n$-vector whose components all equal 1, and let
+$$
+\mathbf{d} = \bfA \boldsymbol{1}. 
+$$
+Explain why $\mathbf{d}$ is the vector whose components are the degrees of the nodes.
+::::
+
+::::{#exr-networks-centrality}
+Find **(a)** the clustering coefficient and **(b)** the betweenness centrality for each node in the following graph:
+
+![](_media/lolly.svg "lollipop graph"){width="380" fig-align="center"}
+::::
+
+::::{#exr-networks-centrality-star}
+A star graph with $n$ nodes and $n-1$ edges has a central node that has an edge to each other node. In terms of $n$, find **(a)** the clustering coefficient and **(b)** the betweenness centrality of the central node of the star graph. 
+::::
+
+::::{#exr-networks-ring-lattice}
+The Watts–Strogatz construction starts with a *ring lattice* in which the nodes are arranged in a circle and each is connected to its $k$ nearest neighbors (i.e., $k/2$ on each side). Show that the clustering coefficient of an arbitrary node in the ring lattice is 
+$$ 
+\frac{3(k-2)}{4(k-1)}. 
+$$
+
+(Hint: Count up all the edges between the neighbors on one side of the node of interest, then all the edges between neighbors on the other side, and finally, the edges going from a neighbor on one side to a neighbor on the other side. It might be easier to work with $m=k/2$ and then eliminate $m$ at the end.)
+::::
+
+::::{#exr-networks-centrality-complete}
+Recall that the complete graph $K_n$ contains every possible edge on $n$ nodes. Prove that the vector $\bfx=[1,1,\ldots,1]$ is an eigenvector of the adjacency matrix of $K_n$. (Therefore, the eigenvector centrality is uniform over the nodes.)
+::::
+
+::::{#exr-networks-star-eigen}
+Prove that for the star graph on $n$ nodes as described in Exercise 8, the vector 
+$$
+\bfx = \bigl[ \sqrt{n-1},1,1,\ldots,1 \bigr]
+$$
+is an eigenvector of the adjacency matrix, where the central node corresponds to the first element of the vector.
+::::
+
+::::{#exr-networks-friendship}
+Prove the friendship paradox, i.e., inequality @eq-networks-friendship-paradox. (Hint: Start with @eq-clustering-angle using $\bfu=\mathbf{d}$ and $\bfv$ equal to a vector of all ones. Convert from equality to inequality to get rid of the angle $\theta$. Simplify the inner product, square both sides, and show that it can be rearranged into @eq-networks-friendship-paradox.)
+::::
